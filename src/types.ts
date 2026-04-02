@@ -44,6 +44,7 @@ export interface BolaoData {
   loginTitle2: string;
   loginSub: string;
   deadline: string;
+  isBettingClosed?: boolean;
 }
 
 export interface Game {
@@ -51,6 +52,7 @@ export interface Game {
   team1: string;
   team2: string;
   date: string;
+  time?: string;
   result: 'win1' | 'draw' | 'win2' | 'pending';
   order: number;
 }
@@ -71,4 +73,5 @@ export interface UserProfile {
   birthDate?: string;
   phone?: string;
   status: 'pending' | 'approved' | 'rejected';
+  betsSubmitted?: boolean;
 }

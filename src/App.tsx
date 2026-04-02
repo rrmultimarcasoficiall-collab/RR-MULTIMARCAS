@@ -95,9 +95,13 @@ export default function App() {
 
   // Sync Auth State
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
+    let unsubUser: (() => void) | null = null;
+    
+    const unsubAuth = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        // Initial check and creation
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
         let profile: UserProfile;
         
         if (userDoc.exists()) {
@@ -110,25 +114,33 @@ export default function App() {
             role: user.email === 'rrmultimarcasoficiall@gmail.com' ? 'admin' : 'user',
             status: user.email === 'rrmultimarcasoficiall@gmail.com' ? 'approved' : 'pending'
           };
-          await setDoc(doc(db, 'users', user.uid), profile);
+          await setDoc(userDocRef, profile);
         }
 
         // Force admin role and approved status for the specific email
         if (user.email === 'rrmultimarcasoficiall@gmail.com') {
           if (profile.role !== 'admin' || profile.status !== 'approved') {
-            profile.role = 'admin';
-            profile.status = 'approved';
-            await updateDoc(doc(db, 'users', user.uid), { role: 'admin', status: 'approved' });
+            await updateDoc(userDocRef, { role: 'admin', status: 'approved' });
           }
         }
 
-        setUserProfile(profile);
+        // Real-time listener for user profile
+        unsubUser = onSnapshot(userDocRef, (snapshot) => {
+          if (snapshot.exists()) {
+            setUserProfile(snapshot.data() as UserProfile);
+          }
+        });
       } else {
         setUserProfile(null);
+        if (unsubUser) unsubUser();
       }
       setIsAuthReady(true);
     });
-    return () => unsub();
+
+    return () => {
+      unsubAuth();
+      if (unsubUser) unsubUser();
+    };
   }, []);
 
   // Load data from Firestore
@@ -138,7 +150,7 @@ export default function App() {
         setData(prev => ({ ...prev, ...snapshot.data() }));
       }
     }, (error) => {
-      console.error('Error loading config:', error);
+      console.error('Error loading config in App:', error);
     });
     return () => unsub();
   }, []);
@@ -201,7 +213,16 @@ export default function App() {
         <div className="absolute inset-0 opacity-[0.04] pointer-events-none" 
              style={{ backgroundImage: 'repeating-linear-gradient(0deg,#fff 0,#fff 1px,transparent 1px,transparent 60px),repeating-linear-gradient(90deg,#fff 0,#fff 1px,transparent 1px,transparent 60px)' }} />
 
-        <div className="absolute top-8 right-8 z-50">
+        <div className="absolute top-8 right-8 z-50 flex items-center gap-4">
+          {userProfile?.role === 'admin' && (
+            <button 
+              onClick={() => setIsAdminOpen(true)}
+              className="bg-zinc-900/80 backdrop-blur-sm border border-white/10 text-white-primary/70 hover:text-green-primary hover:border-green-primary/50 px-4 py-2.5 rounded-xl transition-all flex items-center gap-2 font-bold text-xs uppercase tracking-widest shadow-xl"
+            >
+              <Settings size={16} />
+              <span className="hidden md:inline">Painel Admin</span>
+            </button>
+          )}
           <UserAuth userProfile={userProfile} onProfileUpdate={setUserProfile} />
         </div>
 
@@ -452,7 +473,7 @@ export default function App() {
             </div>
 
             {(userActiveTab === 'jogos' || (!data.isAuditReady && !(data.deadline && new Date() > new Date(data.deadline)))) ? (
-              <ClientGames userId={userProfile.uid} onHitsUpdate={setUserHits} data={data} />
+              <ClientGames userId={userProfile.uid} userProfile={userProfile} onHitsUpdate={setUserHits} data={data} />
             ) : (
               <AuditView />
             )}
@@ -614,14 +635,6 @@ export default function App() {
       {/* Footer */}
       <footer className="py-12 px-8 border-t border-white/5 text-center">
         <p className="text-sm text-white-primary/30">{data.foot}</p>
-        {userProfile?.role === 'admin' && (
-          <button 
-            onClick={() => setIsAdminOpen(true)}
-            className="mt-4 text-white-primary/5 hover:text-white-primary/20 transition-colors cursor-pointer"
-          >
-            <Settings size={16} />
-          </button>
-        )}
       </footer>
 
       {/* Admin Overlay */}
@@ -880,6 +893,19 @@ export default function App() {
                         <h4 className="text-yellow-primary text-[0.7rem] font-bold tracking-widest uppercase mb-6 flex items-center gap-2">
                           <ShieldCheck size={14} /> Auditoria e Transparência
                         </h4>
+                        <div className="flex items-center justify-between mb-6 pb-6 border-b border-white/5">
+                          <div>
+                            <p className="text-sm font-bold text-white-primary/80">Encerrar Apostas Manualmente</p>
+                            <p className="text-xs text-white-primary/40">Bloqueia todas as novas apostas imediatamente.</p>
+                          </div>
+                          <button 
+                            onClick={() => updateField('isBettingClosed', !data.isBettingClosed)}
+                            className={`w-14 h-8 rounded-full p-1 transition-colors ${data.isBettingClosed ? 'bg-red-500' : 'bg-white/10'}`}
+                          >
+                            <div className={`w-6 h-6 bg-white rounded-full transition-transform ${data.isBettingClosed ? 'translate-x-6' : 'translate-x-0'}`} />
+                          </button>
+                        </div>
+
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-sm font-bold text-white-primary/80">Liberar Auditoria Pública</p>

@@ -8,7 +8,7 @@ export const DEFAULT_BOLAO_DATA: BolaoData = {
   eyebrow: 'Copa do Mundo 2026',
   sub: 'Participe do maior bolão da Copa direto pelo seu WhatsApp.<br><strong>Simples, seguro e cheio de prêmios.</strong>',
   ctah: 'Entrar na Comunidade',
-  ctaf: 'Entrar no Bolão agora!',
+  ctaf: 'Acessar a Comunidade',
   csub: 'Entre agora na comunidade e garanta sua vaga no bolão mais animado da Copa!',
   tr1: 'Pagamento seguro via Pix',
   tr2: 'Transparência total',
@@ -53,6 +53,7 @@ export const DEFAULT_BOLAO_DATA: BolaoData = {
   loginTitle2: 'FC',
   loginSub: 'Sua chance de mostrar que entende de futebol e ganhar prêmios incríveis. Faça seus palpites agora!',
   deadline: '',
+  isBettingClosed: false,
 };
 
 export const STORAGE_KEY = 'bolao_cfg_v1';

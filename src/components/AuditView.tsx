@@ -14,46 +14,53 @@ const BettingSheet = ({ sheet, idx, isZoomed = false, games, onSelect }: {
 }) => (
   <div 
     onClick={() => !isZoomed && onSelect?.()}
-    className={`bg-[#f0f0f0] rounded-sm shadow-2xl overflow-hidden flex flex-col border-2 border-black/10 transition-all ${!isZoomed ? 'cursor-zoom-in hover:scale-[1.02]' : 'w-full max-w-2xl'}`}
+    className={`bg-white rounded-sm shadow-2xl overflow-hidden flex flex-col border-2 border-black transition-all ${!isZoomed ? 'cursor-zoom-in hover:scale-[1.02]' : 'w-full max-w-2xl'}`}
   >
-    {/* Sheet Header */}
-    <div className={`bg-white border-b-2 border-black/5 p-3 text-center ${isZoomed ? 'py-6' : ''}`}>
-      <h4 className={`font-black text-black tracking-tighter uppercase ${isZoomed ? 'text-3xl' : 'text-sm'}`}>BOLÃO FC</h4>
-      <div className={`flex items-center justify-center gap-2 text-black/60 font-bold ${isZoomed ? 'text-base mt-2' : 'text-[0.6rem]'}`}>
-        <Calendar size={isZoomed ? 16 : 10} /> RODADA DO DIA {new Date().toLocaleDateString('pt-BR')}
-        <span className="bg-black text-white px-1 rounded">FOLHA Nº {idx + 1}</span>
+    {/* Header with Soccer Balls */}
+    <div className={`bg-white p-4 text-center border-b-4 border-black ${isZoomed ? 'py-10' : 'py-4'}`}>
+      <div className="flex items-center justify-center gap-2">
+        <h4 className={`font-black text-black tracking-tighter uppercase flex items-center gap-2 ${isZoomed ? 'text-6xl' : 'text-2xl'}`}>
+          BOL<span>⚽</span>O FC
+        </h4>
+      </div>
+      <div className={`flex items-center justify-center gap-4 text-black font-black mt-2 ${isZoomed ? 'text-xl' : 'text-[0.6rem]'}`}>
+        <span className="border-2 border-black px-2 py-0.5">RODADA: {new Date().toLocaleDateString('pt-BR')}</span>
+        <span className="bg-black text-white px-2 py-0.5">FOLHA Nº {idx + 1}</span>
       </div>
     </div>
 
-    {/* Sheet Body - Games Table */}
-    <div className={`p-2 flex-1 ${isZoomed ? 'p-6' : ''}`}>
+    {/* Table Body */}
+    <div className={`p-0 flex-1 ${isZoomed ? 'p-4' : ''}`}>
       <table className="w-full border-collapse">
-        <thead>
-          <tr className="border-b border-black/20">
-            <th className={`text-left py-1 text-black/40 uppercase font-bold ${isZoomed ? 'text-sm' : 'text-[0.55rem]'}`}>Jogo</th>
-            <th className={`text-center text-black/40 uppercase font-bold ${isZoomed ? 'text-xs px-4' : 'text-[0.45rem] w-8'}`}>Vitória</th>
-            <th className={`text-center text-black/40 uppercase font-bold ${isZoomed ? 'text-xs px-4' : 'text-[0.45rem] w-8'}`}>Empate</th>
-            <th className={`text-center text-black/40 uppercase font-bold ${isZoomed ? 'text-xs px-4' : 'text-[0.45rem] w-8'}`}>Derrota</th>
-          </tr>
-        </thead>
         <tbody>
           {games.map(game => {
             const bet = sheet.bets.find(b => b.gameId === game.id);
             return (
-              <tr key={game.id} className="border-b border-black/5">
-                <td className="py-1 pr-2">
-                  <div className="flex flex-col">
-                    <span className={`font-black text-black leading-none uppercase truncate ${isZoomed ? 'text-lg' : 'text-[0.6rem] max-w-[80px]'}`}>{game.team1}</span>
-                    <span className={`${isZoomed ? 'text-xs' : 'text-[0.45rem]'} text-black/40 leading-none`}>vs {game.team2}</span>
-                  </div>
-                </td>
-                <td className={`text-center font-black text-black ${isZoomed ? 'text-2xl' : 'text-xs'}`}>
+              <tr key={game.id} className="border-b-2 border-black">
+                {/* Win 1 Box */}
+                <td className={`border-r-2 border-black text-center font-black text-black ${isZoomed ? 'w-16 text-4xl' : 'w-6 text-sm'}`}>
                   {bet?.prediction === 'win1' ? 'X' : ''}
                 </td>
-                <td className={`text-center font-black text-black ${isZoomed ? 'text-2xl' : 'text-xs'}`}>
+                {/* Team 1 */}
+                <td className={`px-2 py-1 font-black text-black uppercase truncate text-right border-r-2 border-black ${isZoomed ? 'text-xl' : 'text-[0.65rem]'}`}>
+                  <div className="flex flex-col items-end">
+                    <span>{game.team1}</span>
+                    {game.time && <span className="text-[0.45rem] opacity-40 leading-none">{game.time}</span>}
+                  </div>
+                </td>
+                {/* Draw Box */}
+                <td className={`text-center font-black text-black border-r-2 border-black ${isZoomed ? 'w-16 text-4xl' : 'w-6 text-sm'}`}>
                   {bet?.prediction === 'draw' ? 'X' : ''}
                 </td>
-                <td className={`text-center font-black text-black ${isZoomed ? 'text-2xl' : 'text-xs'}`}>
+                {/* Team 2 */}
+                <td className={`px-2 py-1 font-black text-black uppercase truncate text-left border-r-2 border-black ${isZoomed ? 'text-xl' : 'text-[0.65rem]'}`}>
+                  <div className="flex flex-col items-start">
+                    <span>{game.team2}</span>
+                    {game.time && <span className="text-[0.45rem] opacity-40 leading-none">{game.time}</span>}
+                  </div>
+                </td>
+                {/* Win 2 Box */}
+                <td className={`text-center font-black text-black ${isZoomed ? 'w-16 text-4xl' : 'w-6 text-sm'}`}>
                   {bet?.prediction === 'win2' ? 'X' : ''}
                 </td>
               </tr>
@@ -63,22 +70,17 @@ const BettingSheet = ({ sheet, idx, isZoomed = false, games, onSelect }: {
       </table>
     </div>
 
-    {/* Sheet Footer - User Info */}
-    <div className={`bg-white border-t-2 border-black/5 p-2 mt-auto ${isZoomed ? 'p-6' : ''}`}>
-      <div className="flex flex-col gap-0.5">
-        <div className={`flex items-center gap-1 font-black text-black uppercase ${isZoomed ? 'text-xl' : 'text-[0.55rem]'}`}>
-          <UserIcon size={isZoomed ? 20 : 10} /> NOME: {sheet.user.displayName}
+    {/* Footer - User Info */}
+    <div className={`bg-white border-t-4 border-black p-4 ${isZoomed ? 'p-8' : 'p-2'}`}>
+      <div className="space-y-1">
+        <div className={`flex items-center gap-2 font-black text-black uppercase border-b-2 border-black pb-1 ${isZoomed ? 'text-2xl' : 'text-[0.7rem]'}`}>
+          NOME: <span className="flex-1">{sheet.user.displayName}</span>
         </div>
-        <div className={`${isZoomed ? 'text-sm' : 'text-[0.5rem]'} text-black/60 font-mono`}>
-          ID: {sheet.user.uid.substring(0, 12)}...
+        <div className={`flex items-center gap-2 font-black text-black uppercase ${isZoomed ? 'text-2xl' : 'text-[0.7rem]'}`}>
+          FONE: <span className="flex-1">{sheet.user.phone || '—'}</span>
         </div>
       </div>
     </div>
-    {!isZoomed && (
-      <div className="absolute top-2 right-2 bg-black/5 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-        <Maximize2 size={12} className="text-black/40" />
-      </div>
-    )}
   </div>
 );
 
@@ -96,6 +98,8 @@ export default function AuditView() {
       // Garantir que não haja duplicatas por ID
       const uniqueGames = Array.from(new Map(gamesData.map(g => [g.id, g])).values());
       setGames(uniqueGames.sort((a, b) => a.order - b.order));
+    }, (error) => {
+      console.error('Error loading games in AuditView:', error);
     });
 
     const unsubBets = onSnapshot(collection(db, 'bets'), (snapshot) => {
@@ -103,6 +107,8 @@ export default function AuditView() {
       // Garantir que não haja duplicatas por ID
       const uniqueBets = Array.from(new Map(betsData.map(b => [b.id, b])).values());
       setAllBets(uniqueBets);
+    }, (error) => {
+      console.error('Error loading bets in AuditView:', error);
     });
 
     const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
@@ -110,6 +116,9 @@ export default function AuditView() {
       // Garantir que não haja duplicatas por UID
       const uniqueUsers = Array.from(new Map(usersData.map(u => [u.uid, u])).values());
       setUsers(uniqueUsers);
+      setLoading(false);
+    }, (error) => {
+      console.error('Error loading users in AuditView:', error);
       setLoading(false);
     });
 

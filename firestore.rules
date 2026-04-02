@@ -31,7 +31,8 @@ service cloud.firestore {
       return data.uid is string && data.uid.size() > 0 &&
              data.email is string && data.email.size() > 0 &&
              data.role in ['admin', 'user'] &&
-             data.status in ['pending', 'approved', 'rejected'];
+             data.status in ['pending', 'approved', 'rejected'] &&
+             (!('betsSubmitted' in data) || data.betsSubmitted is bool);
     }
     function isValidGame(data) {
       return data.team1 is string && data.team1.size() > 0 &&
@@ -54,10 +55,10 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
+      allow read: if isOwner(userId) || isAdmin() || get(/databases/$(database)/documents/config/main).data.isAuditReady == true;
       allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAdmin());
       allow update: if isAuthenticated() && (
-        (isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'birthDate', 'phone'])) ||
+        (isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'birthDate', 'phone', 'betsSubmitted'])) ||
         isAdmin()
       );
       allow delete: if isAdmin();

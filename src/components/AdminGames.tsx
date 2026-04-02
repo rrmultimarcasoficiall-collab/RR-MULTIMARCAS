@@ -5,7 +5,7 @@ import { Trash2, Plus, Check, Clock } from 'lucide-react';
 
 export default function AdminGames() {
   const [games, setGames] = useState<Game[]>([]);
-  const [newGame, setNewGame] = useState({ team1: '', team2: '', date: '', order: 0 });
+  const [newGame, setNewGame] = useState({ team1: '', team2: '', date: '', time: '', order: 0 });
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'games'), (snapshot) => {
@@ -13,6 +13,8 @@ export default function AdminGames() {
       // Garantir que não haja duplicatas por ID
       const uniqueGames = Array.from(new Map(gamesData.map(g => [g.id, g])).values());
       setGames(uniqueGames.sort((a, b) => a.order - b.order));
+    }, (error) => {
+      console.error('Error loading games in AdminGames:', error);
     });
     return () => unsub();
   }, []);
@@ -26,7 +28,7 @@ export default function AdminGames() {
       result: 'pending',
       order: games.length + 1
     });
-    setNewGame({ team1: '', team2: '', date: '', order: 0 });
+    setNewGame({ team1: '', team2: '', date: '', time: '', order: 0 });
   };
 
   const updateResult = async (gameId: string, result: Game['result']) => {
@@ -53,8 +55,13 @@ export default function AdminGames() {
             className="bg-white/5 border border-white/10 rounded-lg px-4 py-2 outline-none focus:border-green-primary"
           />
           <input 
-            type="datetime-local" value={newGame.date}
+            type="date" value={newGame.date}
             onChange={(e) => setNewGame({...newGame, date: e.target.value})}
+            className="bg-white/5 border border-white/10 rounded-lg px-4 py-2 outline-none focus:border-green-primary"
+          />
+          <input 
+            type="time" value={newGame.time}
+            onChange={(e) => setNewGame({...newGame, time: e.target.value})}
             className="bg-white/5 border border-white/10 rounded-lg px-4 py-2 outline-none focus:border-green-primary"
           />
           <button onClick={addGame} className="bg-green-primary text-white font-bold py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-green-dark">
@@ -84,7 +91,7 @@ export default function AdminGames() {
                     <span className="font-bold">{game.team2}</span>
                   </div>
                   <div className="text-[0.6rem] text-white-primary/40 mt-1">
-                    {game.date ? new Date(game.date).toLocaleString('pt-BR') : 'Data não definida'}
+                    {game.date ? new Date(game.date + 'T00:00:00').toLocaleDateString('pt-BR') : 'Data não definida'} {game.time ? ` às ${game.time}` : ''}
                   </div>
                 </td>
                 <td className="py-4 px-4 text-center">
