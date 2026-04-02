@@ -1,0 +1,50 @@
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@400;600;700;900&family=Barlow+Condensed:wght@700;900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Barlow", ui-sans-serif, system-ui, sans-serif;
+  --font-bebas: "Bebas Neue", cursive;
+  --font-condensed: "Barlow Condensed", sans-serif;
+
+  --color-green-primary: #00c853;
+  --color-green-dark: #007b33;
+  --color-yellow-primary: #FFD600;
+  --color-white-primary: #f5f5f0;
+  --color-dark-primary: #0a0f0d;
+  --color-wpp: #25D366;
+  --color-wpp-dark: #128C7E;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-dark-primary text-white-primary font-sans overflow-x-hidden;
+  }
+}
+
+@layer utilities {
+  .text-outline {
+    -webkit-text-stroke: 2px var(--color-green-primary);
+    color: transparent;
+  }
+}
+
+@keyframes pulse-custom {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .5; transform: scale(1.4); }
+}
+
+.animate-pulse-custom {
+  animation: pulse-custom 1.5s infinite;
+}
+
+@keyframes float-ball {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-30px) rotate(180deg); }
+}
+
+.animate-float-ball {
+  animation: float-ball 10s ease-in-out infinite;
+}

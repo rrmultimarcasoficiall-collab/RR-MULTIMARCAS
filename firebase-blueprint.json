@@ -1,0 +1,74 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "displayName": { "type": "string" },
+        "birthDate": { "type": "string", "format": "date" },
+        "phone": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] }
+      },
+      "required": ["uid", "email", "role", "status"]
+    },
+    "Game": {
+      "title": "Game",
+      "description": "A football match in the tournament",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "team1": { "type": "string" },
+        "team2": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "result": { "type": "string", "enum": ["win1", "draw", "win2", "pending"] },
+        "order": { "type": "integer" }
+      },
+      "required": ["team1", "team2", "result"]
+    },
+    "Bet": {
+      "title": "Bet",
+      "description": "A user's prediction for a game",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "gameId": { "type": "string" },
+        "prediction": { "type": "string", "enum": ["win1", "draw", "win2"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "gameId", "prediction"]
+    },
+    "BolaoData": {
+      "title": "BolaoData",
+      "description": "Global application configuration",
+      "type": "object",
+      "properties": {
+        "pass": { "type": "string" },
+        "t1": { "type": "string" },
+        "t2": { "type": "string" },
+        "isAuditReady": { "type": "boolean" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/games/{gameId}": {
+      "schema": "Game",
+      "description": "Tournament games"
+    },
+    "/bets/{betId}": {
+      "schema": "Bet",
+      "description": "User predictions"
+    },
+    "/config/main": {
+      "schema": "BolaoData",
+      "description": "Global application configuration"
+    }
+  }
+}

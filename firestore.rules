@@ -1,0 +1,83 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    function isAdmin() {
+      return isAuthenticated() && 
+        ((request.auth.token.email == "rrmultimarcasoficiall@gmail.com" && request.auth.token.email_verified == true) ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    }
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // ===============================================================
+    // Data Validation
+    // ===============================================================
+    function isValidUser(data) {
+      return data.uid is string && data.uid.size() > 0 &&
+             data.email is string && data.email.size() > 0 &&
+             data.role in ['admin', 'user'] &&
+             data.status in ['pending', 'approved', 'rejected'];
+    }
+    function isValidGame(data) {
+      return data.team1 is string && data.team1.size() > 0 &&
+             data.team2 is string && data.team2.size() > 0 &&
+             data.result in ['win1', 'draw', 'win2', 'pending'];
+    }
+    function isValidBet(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.gameId is string && data.gameId.size() > 0 &&
+             data.prediction in ['win1', 'draw', 'win2'];
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /config/main {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAdmin());
+      allow update: if isAuthenticated() && (
+        (isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'birthDate', 'phone'])) ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /games/{gameId} {
+      allow read: if true; // Publicly readable for the bolão
+      allow write: if isAdmin();
+    }
+
+    match /bets/{betId} {
+      // betId should be userId + "_" + gameId for easy lookup
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid || 
+        isAdmin() || 
+        get(/databases/$(database)/documents/config/main).data.isAuditReady == true
+      );
+      allow create: if isAuthenticated() && isValidBet(request.resource.data);
+      allow update: if isAuthenticated() && isValidBet(request.resource.data) && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+  }
+}
