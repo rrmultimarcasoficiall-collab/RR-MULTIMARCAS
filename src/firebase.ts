@@ -10,7 +10,7 @@ import {
   createUserWithEmailAndPassword,
   sendPasswordResetEmail
 } from 'firebase/auth';
-import { getFirestore, collection, doc, setDoc, getDoc, getDocs, query, where, onSnapshot, updateDoc, deleteDoc, getDocFromServer } from 'firebase/firestore';
+import { getFirestore, collection, doc, setDoc, getDoc, getDocs, query, where, onSnapshot, updateDoc, deleteDoc, getDocFromServer, addDoc, writeBatch, orderBy } from 'firebase/firestore';
 
 // Import the Firebase configuration
 import firebaseConfig from '../firebase-applet-config.json';
@@ -47,6 +47,9 @@ export {
   onSnapshot, 
   updateDoc, 
   deleteDoc,
+  addDoc,
+  writeBatch,
+  orderBy,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   sendPasswordResetEmail

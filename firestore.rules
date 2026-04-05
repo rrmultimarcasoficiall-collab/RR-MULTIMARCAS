@@ -12,11 +12,34 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
     function isAdmin() {
-      return isAuthenticated() && 
-        ((request.auth.token.email == "rrmultimarcasoficiall@gmail.com" && request.auth.token.email_verified == true) ||
-         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+      // Use hardcoded email for immediate admin access
+      // Removed email_verified check to be more permissive for the owner
+      return isAuthenticated() && request.auth.token.email == "rrmultimarcasoficiall@gmail.com";
     }
+
+    // Secondary check for other admins stored in database
+    function isDatabaseAdmin() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isAnyAdmin() {
+      return isAdmin() || isDatabaseAdmin();
+    }
+
+    function isAuditOpen() {
+      let configPath = /databases/$(database)/documents/config/main;
+      return exists(configPath) && (
+        get(configPath).data.isAuditReady == true || (
+          'deadline' in get(configPath).data && 
+          get(configPath).data.deadline != "" && 
+          get(configPath).data.deadline.size() >= 16 && 
+          request.time > timestamp(get(configPath).data.deadline.replace(" ", "T") + ":00Z")
+        )
+      );
+    }
+
     function hasRequiredFields(fields) {
       return request.resource.data.keys().hasAll(fields);
     }
@@ -31,8 +54,7 @@ service cloud.firestore {
       return data.uid is string && data.uid.size() > 0 &&
              data.email is string && data.email.size() > 0 &&
              data.role in ['admin', 'user'] &&
-             data.status in ['pending', 'approved', 'rejected'] &&
-             (!('betsSubmitted' in data) || data.betsSubmitted is bool);
+             data.status in ['pending', 'approved', 'rejected'];
     }
     function isValidGame(data) {
       return data.team1 is string && data.team1.size() > 0 &&
@@ -40,9 +62,16 @@ service cloud.firestore {
              data.result in ['win1', 'draw', 'win2', 'pending'];
     }
     function isValidBet(data) {
-      return data.userId is string && data.userId == request.auth.uid &&
+      return data.userId is string && (data.userId == request.auth.uid || isAnyAdmin()) &&
              data.gameId is string && data.gameId.size() > 0 &&
              data.prediction in ['win1', 'draw', 'win2'];
+    }
+    function isValidCartela(data) {
+      return data.userId is string && (data.userId == request.auth.uid || isAnyAdmin()) &&
+             data.predictions is map &&
+             data.paymentStatus in ['pending', 'approved', 'rejected'] &&
+             data.quantity is int && data.quantity > 0 &&
+             data.totalAmount is number && data.totalAmount >= 0;
     }
 
     // ===============================================================
@@ -51,34 +80,65 @@ service cloud.firestore {
 
     match /config/main {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isAnyAdmin();
     }
 
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin() || get(/databases/$(database)/documents/config/main).data.isAuditReady == true;
-      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAdmin());
+      // Allow list only if admin or audit is open
+      allow list: if isAnyAdmin() || isAuditOpen();
+      // Allow get if owner, admin or audit is open
+      allow get: if isOwner(userId) || isAnyAdmin() || isAuditOpen();
+      
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (isOwner(userId) || isAnyAdmin());
       allow update: if isAuthenticated() && (
-        (isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'birthDate', 'phone', 'betsSubmitted'])) ||
-        isAdmin()
+        (isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'birthDate', 'phone', 'betsSubmitted', 'paymentStatus', 'status'])) ||
+        isAnyAdmin()
       );
-      allow delete: if isAdmin();
+      allow delete: if isAnyAdmin();
     }
 
     match /games/{gameId} {
-      allow read: if true; // Publicly readable for the bolão
-      allow write: if isAdmin();
+      allow read: if true;
+      allow write: if isAnyAdmin();
+    }
+
+    match /draftGames/{gameId} {
+      allow read: if isAnyAdmin();
+      allow write: if isAnyAdmin();
     }
 
     match /bets/{betId} {
-      // betId should be userId + "_" + gameId for easy lookup
-      allow read: if isAuthenticated() && (
-        resource.data.userId == request.auth.uid || 
-        isAdmin() || 
-        get(/databases/$(database)/documents/config/main).data.isAuditReady == true
+      // Allow list only if admin or audit is open, or querying own bets
+      allow list: if isAuthenticated() && (
+        isAnyAdmin() || 
+        isAuditOpen() || 
+        (request.query.filters.userId == request.auth.uid)
       );
+      // Allow get if owner, admin or audit is open
+      allow get: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid || 
+        isAnyAdmin() || 
+        isAuditOpen()
+      );
+      
       allow create: if isAuthenticated() && isValidBet(request.resource.data);
-      allow update: if isAuthenticated() && isValidBet(request.resource.data) && resource.data.userId == request.auth.uid;
-      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if isAuthenticated() && isValidBet(request.resource.data) && (resource.data.userId == request.auth.uid || isAnyAdmin());
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAnyAdmin());
+    }
+
+    match /cartelas/{cartelaId} {
+      allow read: if resource.data.paymentStatus == 'approved' || (isAuthenticated() && (
+        resource.data.userId == request.auth.uid || 
+        isAnyAdmin()
+      ));
+      allow create: if isAuthenticated() && isValidCartela(request.resource.data);
+      allow update: if isAnyAdmin();
+      allow delete: if isAnyAdmin();
+    }
+
+    match /teams/{teamId} {
+      allow read: if true;
+      allow write: if isAnyAdmin();
     }
   }
 }

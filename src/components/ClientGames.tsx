@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react';
-import { db, collection, doc, setDoc, onSnapshot, query, where, updateDoc } from '../firebase';
-import { Game, Bet, BolaoData, UserProfile } from '../types';
-import { Check, Clock, Trophy, AlertCircle, Save, AlertTriangle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { db, collection, doc, setDoc, onSnapshot, query, where, updateDoc, addDoc } from '../firebase';
+import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
+import { Game, Bet, BolaoData, UserProfile, Cartela } from '../types';
+import { Check, Clock, Trophy, AlertCircle, Save, AlertTriangle, CreditCard, Copy, ExternalLink, QrCode, DollarSign, User, Calendar } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { QRCodeSVG } from 'qrcode.react';
+import { generatePixPayload } from '../lib/pix';
 
 interface ClientGamesProps {
   userId: string;
@@ -19,8 +22,28 @@ export default function ClientGames({ userId, userProfile, onHitsUpdate, data }:
   const [filter, setFilter] = useState<'all' | 'my-bets'>('all');
   const [isConfirming, setIsConfirming] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [showPixModal, setShowPixModal] = useState(false);
+  const [quantity, setQuantity] = useState(1);
+  const [pixPayload, setPixPayload] = useState('');
+  const [isCopying, setIsCopying] = useState(false);
+  const [pendingCartela, setPendingCartela] = useState<Cartela | null>(null);
+  const [approvedCartelas, setApprovedCartelas] = useState<Cartela[]>([]);
+
+  const PIX_KEY = '3c496ef8-44bd-4cc7-87b4-a2c950ca2e03';
+  const PRICE_PER_TICKET = 10;
 
   useEffect(() => {
+    if (!userId) return;
+
+    // Fetch approved cartelas for transparency
+    const qApproved = query(collection(db, 'cartelas'), where('paymentStatus', '==', 'approved'));
+    const unsubApproved = onSnapshot(qApproved, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Cartela));
+      setApprovedCartelas(data);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'cartelas (approved)');
+    });
+
     // Fetch games
     const unsubGames = onSnapshot(collection(db, 'games'), (snapshot) => {
       const gamesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
@@ -49,9 +72,23 @@ export default function ClientGames({ userId, userProfile, onHitsUpdate, data }:
       console.error('Error loading bets in ClientGames:', error);
     });
 
+    // Fetch pending cartela
+    const qCartelas = query(collection(db, 'cartelas'), where('userId', '==', userId), where('paymentStatus', '==', 'pending'));
+    const unsubCartelas = onSnapshot(qCartelas, (snapshot) => {
+      if (!snapshot.empty) {
+        setPendingCartela({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Cartela);
+      } else {
+        setPendingCartela(null);
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'cartelas (pending)');
+    });
+
     return () => {
+      unsubApproved();
       unsubGames();
       unsubBets();
+      unsubCartelas();
     };
   }, [userId]);
 
@@ -68,19 +105,58 @@ export default function ClientGames({ userId, userProfile, onHitsUpdate, data }:
     }
   }, [games, bets, onHitsUpdate]);
 
-  const earliestGame = games.length > 0 
-    ? [...games].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0]
-    : null;
-
-  const isAutoClosed = earliestGame 
-    ? new Date() > new Date(new Date(earliestGame.date).getTime() - 15 * 60 * 1000)
-    : false;
-
-  const isLocked = userProfile?.betsSubmitted || (data.deadline && new Date() > new Date(data.deadline)) || data.isBettingClosed || isAutoClosed;
+  const isLocked = userProfile?.betsSubmitted || 
+    (!data.isOverrideClosed && (
+      data.isBettingClosed
+    )) || !!pendingCartela;
 
   const handleSelectPrediction = (gameId: string, prediction: Bet['prediction']) => {
     if (isLocked) return;
     setLocalBets(prev => ({ ...prev, [gameId]: prediction }));
+  };
+
+  const handleOpenPix = () => {
+    if (Object.keys(localBets).length === 0) return;
+    const total = quantity * PRICE_PER_TICKET;
+    const payload = generatePixPayload(PIX_KEY, total);
+    setPixPayload(payload);
+    setShowPixModal(true);
+  };
+
+  const handleConfirmPayment = async () => {
+    setIsSaving(true);
+    try {
+      const totalAmount = quantity * PRICE_PER_TICKET;
+      const cartelaData = {
+        userId,
+        userName: userProfile?.displayName || 'Usuário',
+        predictions: localBets,
+        paymentStatus: 'pending',
+        timestamp: new Date().toISOString(),
+        quantity,
+        totalAmount
+      };
+      
+      await addDoc(collection(db, 'cartelas'), cartelaData);
+      await updateDoc(doc(db, 'users', userId), { betsSubmitted: true, paymentStatus: 'pending' });
+      
+      const message = `Olá! Fiz o pagamento de R$ ${totalAmount.toFixed(2)} referente a ${quantity} cartela(s) no Bolão FC. Segue o comprovante.`;
+      const whatsappUrl = `https://wa.me/5561993642412?text=${encodeURIComponent(message)}`;
+      window.open(whatsappUrl, '_blank');
+      
+      setShowPixModal(false);
+      setIsConfirming(false);
+    } catch (error) {
+      console.error('Error saving cartela:', error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(pixPayload);
+    setIsCopying(true);
+    setTimeout(() => setIsCopying(false), 2000);
   };
 
   const handleSaveBets = async () => {
@@ -110,15 +186,68 @@ export default function ClientGames({ userId, userProfile, onHitsUpdate, data }:
 
   const filteredGames = filter === 'all' ? games : games.filter(g => bets[g.id]);
 
+  const totalCollected = approvedCartelas.reduce((acc, c) => acc + (c.totalAmount || 0), 0);
+  const estimatedPrize = totalCollected * 0.7; // 70% do arrecadado
+  const totalParticipants = approvedCartelas.length;
+
   return (
     <div className="space-y-8">
+      {/* Painel de Transparência do Prêmio */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-gradient-to-br from-green-primary/20 to-green-primary/5 border border-green-primary/20 rounded-3xl p-6 flex flex-col items-center justify-center text-center shadow-[0_0_40px_rgba(0,200,83,0.1)]"
+        >
+          <Trophy className="text-green-primary mb-2" size={32} />
+          <p className="text-[0.6rem] font-bold text-green-primary uppercase tracking-widest mb-1">Prêmio Estimado</p>
+          <h4 className="font-bebas text-4xl text-white-primary">R$ {estimatedPrize.toFixed(2)}</h4>
+        </motion.div>
+
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.1 }}
+          className="bg-zinc-900/50 border border-white/5 rounded-3xl p-6 flex flex-col items-center justify-center text-center"
+        >
+          <User className="text-white-primary/40 mb-2" size={24} />
+          <p className="text-[0.6rem] font-bold text-white-primary/40 uppercase tracking-widest mb-1">Participantes Confirmados</p>
+          <h4 className="font-bebas text-3xl text-white-primary">{totalParticipants}</h4>
+        </motion.div>
+
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.2 }}
+          className="bg-zinc-900/50 border border-white/5 rounded-3xl p-6 flex flex-col items-center justify-center text-center"
+        >
+          <DollarSign className="text-white-primary/40 mb-2" size={24} />
+          <p className="text-[0.6rem] font-bold text-white-primary/40 uppercase tracking-widest mb-1">Arrecadação Bruta</p>
+          <h4 className="font-bebas text-3xl text-white-primary">R$ {totalCollected.toFixed(2)}</h4>
+        </motion.div>
+      </div>
+
+      {pendingCartela && (
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-yellow-primary/10 border border-yellow-primary/30 rounded-2xl p-6 text-center"
+        >
+          <div className="w-12 h-12 bg-yellow-primary/20 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">⏳</div>
+          <h4 className="font-bebas text-2xl text-yellow-primary mb-2">Aguardando confirmação da equipe!</h4>
+          <p className="text-white-primary/60 text-sm">
+            Seus palpites foram enviados. Assim que confirmarmos seu pagamento, sua cartela será liberada.
+          </p>
+        </motion.div>
+      )}
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="bg-zinc-900/50 border border-white/5 rounded-2xl p-6 flex items-center gap-4 flex-1">
           <div className="w-12 h-12 bg-green-primary/10 rounded-full flex items-center justify-center text-2xl">⚽</div>
           <div>
             <h3 className="font-bebas text-xl text-white-primary/80">Bolão FC — Rodada Atual</h3>
             <p className="text-[0.65rem] text-white-primary/40 uppercase tracking-widest font-bold">
-              {isLocked ? 'Apostas Encerradas' : 'Faça seus palpites abaixo'}
+              {isLocked ? (pendingCartela ? 'Aguardando Aprovação' : 'Apostas Encerradas') : 'Faça seus palpites abaixo'}
             </p>
           </div>
         </div>
@@ -140,96 +269,227 @@ export default function ClientGames({ userId, userProfile, onHitsUpdate, data }:
       </div>
 
       <div className="space-y-4">
-        {filteredGames.map((game) => {
-          const bet = bets[game.id];
-          const isCorrect = bet && game.result !== 'pending' && bet.prediction === game.result;
-          const isWrong = bet && game.result !== 'pending' && bet.prediction !== game.result;
-          const currentPrediction = localBets[game.id];
-
-          return (
-            <motion.div 
-              key={game.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-zinc-900/30 border border-white/5 rounded-2xl overflow-hidden hover:border-white/10 transition-colors"
-            >
-              <div className="p-4 md:p-6 flex flex-col md:flex-row items-center gap-6">
-                {/* Team 1 */}
-                <div className="flex-1 flex items-center justify-end gap-4 w-full">
-                  <span className="font-bebas text-xl md:text-2xl tracking-wide uppercase text-right flex-1 truncate">{game.team1}</span>
-                  <button 
-                    onClick={() => handleSelectPrediction(game.id, 'win1')}
-                    disabled={game.result !== 'pending' || isLocked}
-                    className={`w-12 h-12 md:w-14 md:h-14 rounded-xl border-2 transition-all flex items-center justify-center text-xl font-black shrink-0 ${currentPrediction === 'win1' ? 'bg-green-primary border-green-primary text-black scale-110 shadow-[0_0_20px_rgba(0,200,83,0.4)]' : 'border-white/10 hover:border-green-primary/50 text-white/20'} ${(game.result !== 'pending' || isLocked) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
-                    {currentPrediction === 'win1' ? 'X' : ''}
-                  </button>
-                </div>
-
-                {/* Draw */}
-                <div className="flex flex-col items-center gap-2 shrink-0">
-                  <div className="text-[0.6rem] font-bold text-white-primary/20 uppercase tracking-tighter">Empate</div>
-                  <button 
-                    onClick={() => handleSelectPrediction(game.id, 'draw')}
-                    disabled={game.result !== 'pending' || isLocked}
-                    className={`w-12 h-12 md:w-14 md:h-14 rounded-xl border-2 transition-all flex items-center justify-center text-xl font-black ${currentPrediction === 'draw' ? 'bg-yellow-primary border-yellow-primary text-black scale-110 shadow-[0_0_20px_rgba(255,214,0,0.4)]' : 'border-white/10 hover:border-yellow-primary/50 text-white/20'} ${(game.result !== 'pending' || isLocked) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
-                    {currentPrediction === 'draw' ? 'X' : ''}
-                  </button>
-                  <div className="text-[0.55rem] text-white-primary/30 font-mono mt-1">
-                    {game.time || (game.date ? new Date(game.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--')}
-                  </div>
-                </div>
-
-                {/* Team 2 */}
-                <div className="flex-1 flex items-center justify-start gap-4 w-full">
-                  <button 
-                    onClick={() => handleSelectPrediction(game.id, 'win2')}
-                    disabled={game.result !== 'pending' || isLocked}
-                    className={`w-12 h-12 md:w-14 md:h-14 rounded-xl border-2 transition-all flex items-center justify-center text-xl font-black shrink-0 ${currentPrediction === 'win2' ? 'bg-red-500 border-red-500 text-white scale-110 shadow-[0_0_20px_rgba(239,68,68,0.4)]' : 'border-white/10 hover:border-red-500/50 text-white/20'} ${(game.result !== 'pending' || isLocked) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
-                    {currentPrediction === 'win2' ? 'X' : ''}
-                  </button>
-                  <span className="font-bebas text-xl md:text-2xl tracking-wide uppercase text-left flex-1 truncate">{game.team2}</span>
-                </div>
-              </div>
-
-              {/* Status Bar */}
-              <div className="bg-white/2 px-6 py-2 flex items-center justify-between border-t border-white/5">
-                <div className="text-[0.6rem] text-white-primary/30 font-bold uppercase tracking-widest">
-                  {game.date ? new Date(game.date).toLocaleDateString('pt-BR') : 'Data não definida'}
-                </div>
-                
-                <div className="flex items-center gap-3">
-                  {game.result !== 'pending' ? (
+        {games.length === 0 || (data.isBettingClosed && data.nextRoundTitle) ? (
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-zinc-900/50 border border-white/10 rounded-[32px] p-12 text-center space-y-6"
+          >
+            <div className="w-24 h-24 bg-yellow-primary/10 rounded-full flex items-center justify-center mx-auto text-yellow-primary mb-4">
+              <Calendar size={48} />
+            </div>
+            <div className="space-y-2">
+              <h3 className="font-bebas text-5xl text-white">
+                {data.isBettingClosed && data.nextRoundTitle ? 'RODADA AGENDADA' : 'AGUARDE A PRÓXIMA RODADA'}
+              </h3>
+              <p className="text-white-primary/40 text-lg max-w-md mx-auto">
+                {data.isBettingClosed && data.nextRoundTitle 
+                  ? 'A próxima rodada já está agendada. Fique atento para a abertura das apostas!'
+                  : 'Estamos preparando os próximos jogos para você palpitar. Fique de olho na nossa comunidade!'}
+              </p>
+            </div>
+            
+            {(data.nextRoundTitle || data.nextRoundDate) && (
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-6 max-w-sm mx-auto space-y-3">
+                {data.nextRoundTitle && (
+                  <p className="font-bebas text-2xl text-yellow-primary uppercase tracking-wider">{data.nextRoundTitle}</p>
+                )}
+                <div className="flex items-center justify-center gap-4 text-white-primary/60">
+                  {data.nextRoundDate && (
                     <div className="flex items-center gap-2">
-                      {isCorrect && <span className="text-green-primary flex items-center gap-1 text-[0.6rem] font-black uppercase tracking-widest"><Trophy size={12} /> Acertou!</span>}
-                      {isWrong && <span className="text-red-400 flex items-center gap-1 text-[0.6rem] font-black uppercase tracking-widest"><AlertCircle size={12} /> Errou</span>}
+                      <Calendar size={16} className="text-green-primary" />
+                      <span className="font-bold">{new Date(data.nextRoundDate + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
                     </div>
-                  ) : (
-                    <div className="flex items-center gap-2 text-[0.6rem] font-bold uppercase tracking-widest text-white-primary/20">
-                      <Clock size={10} /> {isLocked ? 'Encerrado' : 'Aberto'}
+                  )}
+                  {data.nextRoundTime && (
+                    <div className="flex items-center gap-2">
+                      <Clock size={16} className="text-green-primary" />
+                      <span className="font-bold">{data.nextRoundTime}</span>
                     </div>
                   )}
                 </div>
               </div>
-            </motion.div>
-          );
-        })}
+            )}
+          </motion.div>
+        ) : (
+          filteredGames.map((game) => {
+            const bet = bets[game.id];
+            const isCorrect = bet && game.result !== 'pending' && bet.prediction === game.result;
+            const isWrong = bet && game.result !== 'pending' && bet.prediction !== game.result;
+            const currentPrediction = localBets[game.id];
+
+            return (
+              <motion.div 
+                key={game.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-zinc-900/30 border border-white/5 rounded-2xl overflow-hidden hover:border-white/10 transition-colors"
+              >
+                <div className="p-4 md:p-6 flex flex-col md:flex-row items-center gap-6">
+                  {/* Team 1 */}
+                  <div className="flex-1 flex items-center justify-end gap-4 w-full">
+                    <div className="flex flex-col items-end flex-1 truncate">
+                      <span className="font-bebas text-xl md:text-2xl tracking-wide uppercase truncate w-full text-right">{game.team1}</span>
+                      {game.logo1 && <img src={game.logo1} alt="" className="w-8 h-8 object-contain mt-1" referrerPolicy="no-referrer" />}
+                    </div>
+                    <button 
+                      onClick={() => handleSelectPrediction(game.id, 'win1')}
+                      disabled={game.result !== 'pending' || isLocked}
+                      className={`w-12 h-12 md:w-14 md:h-14 rounded-xl border-2 transition-all flex items-center justify-center text-xl font-black shrink-0 ${currentPrediction === 'win1' ? 'bg-green-primary border-green-primary text-black scale-110 shadow-[0_0_20px_rgba(0,200,83,0.4)]' : 'border-white/10 hover:border-green-primary/50 text-white/20'} ${(game.result !== 'pending' || isLocked) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      {currentPrediction === 'win1' ? 'X' : ''}
+                    </button>
+                  </div>
+
+                  {/* Draw */}
+                  <div className="flex flex-col items-center gap-2 shrink-0">
+                    <div className="text-[0.6rem] font-bold text-white-primary/20 uppercase tracking-tighter">Empate</div>
+                    <button 
+                      onClick={() => handleSelectPrediction(game.id, 'draw')}
+                      disabled={game.result !== 'pending' || isLocked}
+                      className={`w-12 h-12 md:w-14 md:h-14 rounded-xl border-2 transition-all flex items-center justify-center text-xl font-black ${currentPrediction === 'draw' ? 'bg-yellow-primary border-yellow-primary text-black scale-110 shadow-[0_0_20px_rgba(255,214,0,0.4)]' : 'border-white/10 hover:border-yellow-primary/50 text-white/20'} ${(game.result !== 'pending' || isLocked) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      {currentPrediction === 'draw' ? 'X' : ''}
+                    </button>
+                    <div className="text-[0.55rem] text-white-primary/30 font-mono mt-1">
+                      {game.time || (game.date ? new Date(game.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--')}
+                    </div>
+                  </div>
+
+                  {/* Team 2 */}
+                  <div className="flex-1 flex items-center justify-start gap-4 w-full">
+                    <button 
+                      onClick={() => handleSelectPrediction(game.id, 'win2')}
+                      disabled={game.result !== 'pending' || isLocked}
+                      className={`w-12 h-12 md:w-14 md:h-14 rounded-xl border-2 transition-all flex items-center justify-center text-xl font-black shrink-0 ${currentPrediction === 'win2' ? 'bg-red-500 border-red-500 text-white scale-110 shadow-[0_0_20px_rgba(239,68,68,0.4)]' : 'border-white/10 hover:border-red-500/50 text-white/20'} ${(game.result !== 'pending' || isLocked) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      {currentPrediction === 'win2' ? 'X' : ''}
+                    </button>
+                    <div className="flex flex-col items-start flex-1 truncate">
+                      <span className="font-bebas text-xl md:text-2xl tracking-wide uppercase truncate w-full text-left">{game.team2}</span>
+                      {game.logo2 && <img src={game.logo2} alt="" className="w-8 h-8 object-contain mt-1" referrerPolicy="no-referrer" />}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Status Bar */}
+                <div className="bg-white/2 px-6 py-2 flex items-center justify-between border-t border-white/5">
+                  <div className="text-[0.6rem] text-white-primary/30 font-bold uppercase tracking-widest">
+                    {game.date ? new Date(game.date).toLocaleDateString('pt-BR') : 'Data não definida'}
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    {game.result !== 'pending' ? (
+                      <div className="flex items-center gap-2">
+                        {isCorrect && <span className="text-green-primary flex items-center gap-1 text-[0.6rem] font-black uppercase tracking-widest"><Trophy size={12} /> Acertou!</span>}
+                        {isWrong && <span className="text-red-400 flex items-center gap-1 text-[0.6rem] font-black uppercase tracking-widest"><AlertCircle size={12} /> Errou</span>}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-[0.6rem] font-bold uppercase tracking-widest text-white-primary/20">
+                        <Clock size={10} /> {isLocked ? 'Encerrado' : 'Aberto'}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })
+        )}
       </div>
 
       {!isLocked && Object.keys(localBets).length > 0 && !userProfile?.betsSubmitted && (
-        <div className="flex justify-center pt-8">
+        <div className="flex flex-col items-center gap-6 pt-8">
+          <div className="flex items-center gap-4 bg-zinc-900/50 p-4 rounded-2xl border border-white/5">
+            <span className="text-xs font-bold uppercase tracking-widest text-white-primary/40">Quantidade de Cartelas:</span>
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center font-bold"
+              >-</button>
+              <span className="font-bebas text-xl w-8 text-center">{quantity}</span>
+              <button 
+                onClick={() => setQuantity(quantity + 1)}
+                className="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center font-bold"
+              >+</button>
+            </div>
+            <div className="ml-4 pl-4 border-l border-white/10">
+              <span className="text-xs text-white-primary/40 block">Total:</span>
+              <span className="text-green-primary font-bebas text-xl">R$ {(quantity * PRICE_PER_TICKET).toFixed(2)}</span>
+            </div>
+          </div>
+
           <button 
-            onClick={() => setIsConfirming(true)}
+            onClick={handleOpenPix}
             className="bg-green-primary text-black font-black px-12 py-4 rounded-2xl flex items-center gap-3 hover:scale-105 transition-all shadow-[0_0_30px_rgba(0,200,83,0.3)] group"
           >
-            <Save size={20} className="group-hover:rotate-12 transition-transform" /> SALVAR MEUS PALPITES
+            <CreditCard size={20} className="group-hover:rotate-12 transition-transform" /> FAZER PAGAMENTO
           </button>
         </div>
       )}
 
-      {userProfile?.betsSubmitted && (
+      {/* Pix Modal */}
+      <AnimatePresence>
+        {showPixModal && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/90 backdrop-blur-md z-[100] flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-[#111418] border border-white/10 rounded-3xl p-8 w-full max-w-md text-center relative"
+            >
+              <button 
+                onClick={() => setShowPixModal(false)}
+                className="absolute top-4 right-4 text-white-primary/20 hover:text-white"
+              >✕</button>
+
+              <div className="w-16 h-16 bg-green-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                <QrCode className="text-green-primary" size={32} />
+              </div>
+
+              <h3 className="font-bebas text-3xl mb-2">Pagamento via Pix</h3>
+              <p className="text-white-primary/40 text-sm mb-8">
+                Escaneie o QR Code ou copie o código abaixo para pagar <br />
+                <span className="text-white font-bold">R$ {(quantity * PRICE_PER_TICKET).toFixed(2)}</span>
+              </p>
+
+              <div className="bg-white p-4 rounded-2xl inline-block mb-8 shadow-[0_0_40px_rgba(255,255,255,0.1)]">
+                <QRCodeSVG value={pixPayload} size={200} />
+              </div>
+
+              <div className="space-y-4">
+                <button 
+                  onClick={copyToClipboard}
+                  className="w-full py-4 bg-white/5 hover:bg-white/10 text-white font-bold rounded-2xl transition-all border border-white/10 flex items-center justify-center gap-3 group"
+                >
+                  {isCopying ? (
+                    <><Check size={18} className="text-green-primary" /> COPIADO!</>
+                  ) : (
+                    <><Copy size={18} className="text-white-primary/40 group-hover:text-white" /> COPIAR CÓDIGO PIX</>
+                  )}
+                </button>
+
+                <button 
+                  onClick={handleConfirmPayment}
+                  disabled={isSaving}
+                  className="w-full py-4 bg-green-primary text-black font-black rounded-2xl transition-all shadow-[0_0_20px_rgba(0,200,83,0.2)] flex items-center justify-center gap-3"
+                >
+                  {isSaving ? 'PROCESSANDO...' : <><ExternalLink size={18} /> JÁ FIZ O PAGAMENTO</>}
+                </button>
+              </div>
+
+              <p className="mt-6 text-[0.65rem] text-white-primary/20 uppercase tracking-widest font-bold">
+                Após pagar, você será redirecionado para o WhatsApp para enviar o comprovante.
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {userProfile?.betsSubmitted && !pendingCartela && (
         <div className="bg-green-primary/5 border border-green-primary/20 rounded-2xl p-8 text-center max-w-xl mx-auto">
           <div className="w-16 h-16 bg-green-primary/20 rounded-full flex items-center justify-center text-3xl mx-auto mb-4">✅</div>
           <h4 className="font-bebas text-2xl text-green-primary mb-2">Palpites salvos com sucesso!</h4>
@@ -240,14 +500,23 @@ export default function ClientGames({ userId, userProfile, onHitsUpdate, data }:
         </div>
       )}
 
-      {isLocked && !userProfile?.betsSubmitted && (
-        <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-8 text-center max-w-xl mx-auto">
-          <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center text-3xl mx-auto mb-4">🔒</div>
-          <h4 className="font-bebas text-2xl text-red-400 mb-2">Apostas Encerradas</h4>
+      {isLocked && !userProfile?.betsSubmitted && !pendingCartela && (
+        <div className="bg-yellow-500/5 border border-yellow-500/20 rounded-2xl p-8 text-center max-w-xl mx-auto">
+          <div className="w-16 h-16 bg-yellow-500/20 rounded-full flex items-center justify-center text-3xl mx-auto mb-4">⏳</div>
+          <h4 className="font-bebas text-2xl text-yellow-400 mb-2">AGUARDE A PRÓXIMA RODADA</h4>
           <p className="text-white-primary/40 text-sm leading-relaxed">
-            O prazo para esta rodada expirou. <br />
-            Fique atento para a próxima rodada!
+            As apostas para esta rodada foram encerradas pelo administrador. <br />
+            Fique atento para a abertura da próxima rodada!
           </p>
+          {userProfile?.role === 'admin' && (
+            <div className="mt-6 p-4 bg-white/5 rounded-xl border border-white/10 text-left">
+              <p className="text-[0.6rem] font-bold text-yellow-primary uppercase tracking-widest mb-2">Status do Admin:</p>
+              <ul className="text-xs text-white-primary/60 space-y-1 list-disc ml-4">
+                {data.isBettingClosed && <li>Bloqueio manual ativado no painel.</li>}
+                {data.isOverrideClosed && <li className="text-green-primary font-bold">SOBREPOSIÇÃO ATIVA: Apostas liberadas pelo administrador.</li>}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 

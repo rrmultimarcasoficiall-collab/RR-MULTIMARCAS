@@ -35,8 +35,8 @@ export const DEFAULT_BOLAO_DATA: BolaoData = {
   st4t: 'Ganhe os prêmios',
   st4d: 'Quem acertar o maior número de jogos leva o prêmio principal. Simples assim!',
   psub: 'O valor dos prêmios cresce com o número de participantes.',
-  pnote: '* Os outros 20% cobrem custos de organização e operação do bolão.',
-  p1v: '80%',
+  pnote: '* Os outros 30% cobrem custos de organização e operação do bolão.',
+  p1v: '70%',
   p1d: 'do total arrecadado',
   rules: [
     'Ganha quem acertar todos os 8 jogos da rodada',
@@ -54,6 +54,10 @@ export const DEFAULT_BOLAO_DATA: BolaoData = {
   loginSub: 'Sua chance de mostrar que entende de futebol e ganhar prêmios incríveis. Faça seus palpites agora!',
   deadline: '',
   isBettingClosed: false,
+  isOverrideClosed: false,
+  nextRoundTitle: 'Próxima Rodada',
+  nextRoundDate: '',
+  nextRoundTime: '',
 };
 
 export const STORAGE_KEY = 'bolao_cfg_v1';

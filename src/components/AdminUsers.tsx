@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { db, collection, onSnapshot, doc, updateDoc, deleteDoc, getDocs, query, where } from '../firebase';
+import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 import { UserProfile } from '../types';
 import { UserCheck, UserX, Clock, Search, Smartphone, Calendar, Mail, Trash2, AlertTriangle } from 'lucide-react';
 
@@ -17,7 +18,7 @@ export default function AdminUsers() {
       setUsers(uniqueUsers);
       setLoading(false);
     }, (error) => {
-      console.error('Error loading users in AdminUsers:', error);
+      handleFirestoreError(error, OperationType.LIST, 'users');
       setLoading(false);
     });
 

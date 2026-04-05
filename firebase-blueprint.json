@@ -51,6 +51,31 @@
         "t2": { "type": "string" },
         "isAuditReady": { "type": "boolean" }
       }
+    },
+    "Cartela": {
+      "title": "Cartela",
+      "description": "A set of bets with payment status",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "predictions": { "type": "object" },
+        "paymentStatus": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "quantity": { "type": "integer" },
+        "totalAmount": { "type": "number" }
+      },
+      "required": ["userId", "predictions", "paymentStatus", "quantity", "totalAmount"]
+    },
+    "Team": {
+      "title": "Team",
+      "description": "A team with its name and logo",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "logo": { "type": "string" }
+      },
+      "required": ["name", "logo"]
     }
   },
   "firestore": {
@@ -62,13 +87,25 @@
       "schema": "Game",
       "description": "Tournament games"
     },
+    "/draftGames/{gameId}": {
+      "schema": "Game",
+      "description": "Games in preparation (draft)"
+    },
     "/bets/{betId}": {
       "schema": "Bet",
       "description": "User predictions"
     },
+    "/cartelas/{cartelaId}": {
+      "schema": "Cartela",
+      "description": "User cartelas and payments"
+    },
     "/config/main": {
       "schema": "BolaoData",
       "description": "Global application configuration"
+    },
+    "/teams/{teamId}": {
+      "schema": "Team",
+      "description": "Team logos and names"
     }
   }
 }

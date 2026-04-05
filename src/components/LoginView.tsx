@@ -32,7 +32,10 @@ interface LoginViewProps {
 }
 
 export default function LoginView({ onLoginSuccess, data }: LoginViewProps) {
-  const [isRegistering, setIsRegistering] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(() => {
+    // Default to registration for new users
+    return !localStorage.getItem('bolao_has_account');
+  });
   const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -42,6 +45,11 @@ export default function LoginView({ onLoginSuccess, data }: LoginViewProps) {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const handleSuccess = (profile: UserProfile) => {
+    localStorage.setItem('bolao_has_account', 'true');
+    onLoginSuccess(profile);
+  };
 
   const handleGoogleLogin = async () => {
     setLoading(true);
@@ -77,7 +85,7 @@ export default function LoginView({ onLoginSuccess, data }: LoginViewProps) {
         return;
       }
 
-      onLoginSuccess(profile);
+      handleSuccess(profile);
     } catch (err: any) {
       setError('Falha ao entrar com Google. Tente novamente.');
       console.error(err);
@@ -111,7 +119,7 @@ export default function LoginView({ onLoginSuccess, data }: LoginViewProps) {
           status: email === 'rrmultimarcasoficiall@gmail.com' ? 'approved' : 'pending'
         };
         await setDoc(doc(db, 'users', result.user.uid), profile);
-        onLoginSuccess(profile);
+        handleSuccess(profile);
       } else {
         const result = await signInWithEmailAndPassword(auth, email, password);
         const userDoc = await getDoc(doc(db, 'users', result.user.uid));
@@ -140,7 +148,7 @@ export default function LoginView({ onLoginSuccess, data }: LoginViewProps) {
           return;
         }
 
-        onLoginSuccess(profile);
+        handleSuccess(profile);
       }
     } catch (err: any) {
       if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
@@ -178,9 +186,9 @@ export default function LoginView({ onLoginSuccess, data }: LoginViewProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex flex-col md:flex-row bg-[#0a0d10] overflow-hidden">
+    <div className="fixed inset-0 z-[200] flex flex-col md:flex-row bg-[#0a0d10] overflow-y-auto md:overflow-hidden">
       {/* Left Side: Visual Background */}
-      <div className="relative w-full md:w-1/2 lg:w-[60%] h-[30vh] md:h-full overflow-hidden">
+      <div className="relative w-full md:w-1/2 lg:w-[60%] h-[30vh] md:h-full shrink-0">
         <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent z-10" />
         <div className="absolute inset-0 bg-gradient-to-t from-[#0a0d10] via-transparent to-transparent z-10 md:hidden" />
         
@@ -213,7 +221,7 @@ export default function LoginView({ onLoginSuccess, data }: LoginViewProps) {
       </div>
 
       {/* Right Side: Login Form */}
-      <div className="w-full md:w-1/2 lg:w-[40%] h-full flex items-center justify-center p-6 md:p-12 bg-[#0a0d10] relative z-30">
+      <div className="w-full md:w-1/2 lg:w-[40%] min-h-[70vh] md:h-full flex items-center justify-start md:justify-center px-6 py-12 md:p-12 bg-[#0a0d10] relative z-30">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -221,12 +229,12 @@ export default function LoginView({ onLoginSuccess, data }: LoginViewProps) {
         >
           <div className="mb-10">
             <h2 className="font-bebas text-4xl text-white mb-2">
-              {isForgotPassword ? 'Recuperar Senha' : (isRegistering ? 'Criar Conta' : 'Bem-vindo de volta')}
+              {isForgotPassword ? 'Recuperar Senha' : (isRegistering ? 'Cadastre-se' : 'Acesse sua conta')}
             </h2>
             <p className="text-white-primary/40 text-sm">
               {isForgotPassword 
                 ? 'Enviaremos um link para o seu e-mail' 
-                : (isRegistering ? 'Preencha os dados abaixo para começar' : 'Entre com sua conta para continuar')}
+                : (isRegistering ? 'Crie sua conta para começar a jogar' : 'Entre com sua conta para continuar')}
             </p>
           </div>
 
@@ -383,7 +391,7 @@ export default function LoginView({ onLoginSuccess, data }: LoginViewProps) {
                 Entrar com Google
               </button>
 
-              <p className="text-center mt-10 text-white-primary/40 text-xs font-medium">
+              <p className="text-center mt-10 mb-12 text-white-primary/40 text-xs font-medium">
                 {isRegistering ? 'Já tem uma conta?' : 'Não tem uma conta?'}
                 <button 
                   onClick={() => setIsRegistering(!isRegistering)}

@@ -45,12 +45,18 @@ export interface BolaoData {
   loginSub: string;
   deadline: string;
   isBettingClosed?: boolean;
+  isOverrideClosed?: boolean;
+  nextRoundTitle?: string;
+  nextRoundDate?: string;
+  nextRoundTime?: string;
 }
 
 export interface Game {
   id: string;
   team1: string;
   team2: string;
+  logo1?: string;
+  logo2?: string;
   date: string;
   time?: string;
   result: 'win1' | 'draw' | 'win2' | 'pending';
@@ -74,4 +80,22 @@ export interface UserProfile {
   phone?: string;
   status: 'pending' | 'approved' | 'rejected';
   betsSubmitted?: boolean;
+  paymentStatus?: 'pending' | 'approved' | 'none';
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  logo: string;
+}
+
+export interface Cartela {
+  id: string;
+  userId: string;
+  userName: string;
+  predictions: Record<string, 'win1' | 'draw' | 'win2'>;
+  paymentStatus: 'pending' | 'approved' | 'rejected';
+  timestamp: string;
+  quantity: number;
+  totalAmount: number;
 }
