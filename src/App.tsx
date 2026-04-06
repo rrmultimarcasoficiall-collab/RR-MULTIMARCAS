@@ -435,7 +435,7 @@ export default function App() {
                   >
                     <Calendar size={14} /> Jogos
                   </button>
-                  {(data.isAuditReady || (data.deadline && new Date() > new Date(data.deadline.includes('T') ? data.deadline + ":00Z" : data.deadline))) && (
+                  {data.isAuditReady && (
                     <button 
                       onClick={() => setUserActiveTab('auditoria')}
                       className={`flex-1 sm:flex-none px-4 md:px-6 py-2.5 rounded-lg text-[0.6rem] md:text-[0.65rem] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${userActiveTab === 'auditoria' ? 'bg-green-primary text-white shadow-lg' : 'text-white-primary/40 hover:text-white-primary/70'}`}
@@ -456,7 +456,7 @@ export default function App() {
               </div>
             </div>
 
-            {(userActiveTab === 'jogos' || (!data.isAuditReady && !(data.deadline && new Date() > new Date(data.deadline.includes('T') ? data.deadline + ":00Z" : data.deadline)))) ? (
+            {(userActiveTab === 'jogos' || !data.isAuditReady) ? (
               <ClientGames userId={userProfile.uid} userProfile={userProfile} onHitsUpdate={setUserHits} data={data} />
             ) : (
               <AuditView currentUser={userProfile} />

@@ -30,14 +30,7 @@ service cloud.firestore {
 
     function isAuditOpen() {
       let configPath = /databases/$(database)/documents/config/main;
-      return exists(configPath) && (
-        get(configPath).data.isAuditReady == true || (
-          'deadline' in get(configPath).data && 
-          get(configPath).data.deadline != "" && 
-          get(configPath).data.deadline.size() >= 16 && 
-          request.time > timestamp(get(configPath).data.deadline + ":00Z")
-        )
-      );
+      return exists(configPath) && get(configPath).data.isAuditReady == true;
     }
 
     function hasRequiredFields(fields) {

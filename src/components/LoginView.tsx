@@ -391,15 +391,17 @@ export default function LoginView({ onLoginSuccess, data }: LoginViewProps) {
                 Entrar com Google
               </button>
 
-              <p className="text-center mt-10 mb-12 text-white-primary/40 text-xs font-medium">
-                {isRegistering ? 'Já tem uma conta?' : 'Não tem uma conta?'}
+              <div className="mt-10 mb-12 p-6 rounded-2xl bg-white/5 border border-white/10 text-center">
+                <p className="text-white-primary/40 text-xs font-medium mb-3">
+                  {isRegistering ? 'Já tem uma conta?' : 'Não tem uma conta?'}
+                </p>
                 <button 
                   onClick={() => setIsRegistering(!isRegistering)}
-                  className="text-green-primary font-bold ml-2 hover:underline"
+                  className="w-full py-3 rounded-xl border border-green-primary/30 text-green-primary font-bold text-xs uppercase tracking-widest hover:bg-green-primary/10 transition-all"
                 >
                   {isRegistering ? 'Fazer Login' : 'Cadastre-se agora'}
                 </button>
-              </p>
+              </div>
             </>
           )}
         </motion.div>
