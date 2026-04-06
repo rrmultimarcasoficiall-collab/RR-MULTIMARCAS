@@ -420,37 +420,37 @@ export default function App() {
             viewport={{ once: true }}
             className="max-w-6xl mx-auto py-12 md:py-24 px-4 md:px-8 border-t border-white/5"
           >
-            <div className="mb-12 flex flex-wrap items-end justify-between gap-6">
-              <div>
-                <p className="font-condensed font-bold text-sm tracking-widest text-green-primary uppercase mb-2">Área do Cliente</p>
-                <h2 className="font-bebas text-5xl md:text-7xl leading-none">
+            <div className="mb-8 md:mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
+              <div className="text-center md:text-left">
+                <p className="font-condensed font-bold text-xs md:text-sm tracking-widest text-green-primary uppercase mb-2">Área do Cliente</p>
+                <h2 className="font-bebas text-4xl md:text-7xl leading-none">
                   {userActiveTab === 'jogos' ? 'Meus Palpites' : 'Auditoria Pública'}
                 </h2>
               </div>
-              <div className="flex items-center gap-6">
-                <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
+              <div className="flex flex-col sm:flex-row items-center gap-4 md:gap-6">
+                <div className="flex bg-white/5 p-1 rounded-xl border border-white/10 w-full sm:w-auto">
                   <button 
                     onClick={() => setUserActiveTab('jogos')}
-                    className={`px-6 py-2.5 rounded-lg text-[0.65rem] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${userActiveTab === 'jogos' ? 'bg-green-primary text-white shadow-lg' : 'text-white-primary/40 hover:text-white-primary/70'}`}
+                    className={`flex-1 sm:flex-none px-4 md:px-6 py-2.5 rounded-lg text-[0.6rem] md:text-[0.65rem] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${userActiveTab === 'jogos' ? 'bg-green-primary text-white shadow-lg' : 'text-white-primary/40 hover:text-white-primary/70'}`}
                   >
                     <Calendar size={14} /> Jogos
                   </button>
                   {(data.isAuditReady || (data.deadline && new Date() > new Date(data.deadline.includes('T') ? data.deadline + ":00Z" : data.deadline))) && (
                     <button 
                       onClick={() => setUserActiveTab('auditoria')}
-                      className={`px-6 py-2.5 rounded-lg text-[0.65rem] font-bold uppercase tracking-widest transition-all flex items-center gap-2 ${userActiveTab === 'auditoria' ? 'bg-green-primary text-white shadow-lg' : 'text-white-primary/40 hover:text-white-primary/70'}`}
+                      className={`flex-1 sm:flex-none px-4 md:px-6 py-2.5 rounded-lg text-[0.6rem] md:text-[0.65rem] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${userActiveTab === 'auditoria' ? 'bg-green-primary text-white shadow-lg' : 'text-white-primary/40 hover:text-white-primary/70'}`}
                     >
                       <ShieldCheck size={14} /> Auditoria
                     </button>
                   )}
                 </div>
-                <div className="bg-white/5 border border-white/10 rounded-2xl px-6 py-4 flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-yellow-primary/20 flex items-center justify-center text-yellow-primary">
-                    <Trophy size={20} />
+                <div className="bg-white/5 border border-white/10 rounded-2xl px-4 md:px-6 py-3 md:py-4 flex items-center gap-3 md:gap-4 w-full sm:w-auto justify-center sm:justify-start">
+                  <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-yellow-primary/20 flex items-center justify-center text-yellow-primary shrink-0">
+                    <Trophy size={18} md:size={20} />
                   </div>
                   <div>
-                    <div className="text-[0.65rem] font-bold tracking-widest text-white-primary/40 uppercase">Seu Desempenho</div>
-                    <div className="font-bebas text-2xl text-white-primary">{userHits} / 8 Acertos</div>
+                    <div className="text-[0.55rem] md:text-[0.65rem] font-bold tracking-widest text-white-primary/40 uppercase">Seu Desempenho</div>
+                    <div className="font-bebas text-xl md:text-2xl text-white-primary">{userHits} / 8 Acertos</div>
                   </div>
                 </div>
               </div>
@@ -481,12 +481,12 @@ export default function App() {
           >
             <div className="max-w-7xl mx-auto px-4 py-12">
               <div className="bg-[#111418] border border-white/10 rounded-3xl overflow-hidden flex flex-col shadow-2xl">
-                <div className="bg-gradient-to-r from-[#0f2027] to-[#1e3a4a] p-6 flex items-center justify-between shrink-0">
+                <div className="bg-gradient-to-r from-[#0f2027] to-[#1e3a4a] p-4 md:p-6 flex flex-col md:flex-row md:items-center justify-between shrink-0 gap-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-green-primary/20 flex items-center justify-center text-green-primary">
+                    <div className="w-10 h-10 rounded-full bg-green-primary/20 flex items-center justify-center text-green-primary shrink-0">
                       <Settings size={20} />
                     </div>
-                    <h2 className="font-bebas text-2xl tracking-wider uppercase">Painel de Controle Administrativo</h2>
+                    <h2 className="font-bebas text-xl md:text-2xl tracking-wider uppercase">Painel de Controle Administrativo</h2>
                   </div>
                   <div className="flex items-center gap-4">
                     <div className="flex items-center gap-2 bg-black/20 px-3 py-1.5 rounded-lg border border-white/5">
@@ -534,6 +534,22 @@ export default function App() {
                       )}
                       {activeTab === 'pagamentos' && (
                         <AdminPayments />
+                      )}
+                      {activeTab === 'links' && (
+                        <div className="space-y-6">
+                          <h3 className="font-bebas text-xl text-white-primary/60 border-b border-white/5 pb-2 mb-6">Configuração de Links e Pagamentos</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <AdminField label="Chave Pix (E-mail, CPF ou Aleatória)" value={data.pixKey || ''} onChange={(v) => updateField('pixKey', v)} />
+                            <AdminField label="Valor por Cartela (R$)" value={String(data.pricePerTicket || 10)} onChange={(v) => updateField('pricePerTicket', Number(v))} />
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <AdminField label="WhatsApp de Suporte (Ex: 5561999999999)" value={data.wn || ''} onChange={(v) => updateField('wn', v)} />
+                            <AdminField label="Link do Grupo/Comunidade" value={data.lh || ''} onChange={(v) => updateField('lh', v)} />
+                          </div>
+                          <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 text-xs text-blue-400 leading-relaxed">
+                            <p>ℹ️ <strong>Informação:</strong> O número do WhatsApp deve conter apenas números, incluindo o código do país (55) e o DDD.</p>
+                          </div>
+                        </div>
                       )}
                       {activeTab === 'login' && (
                         <div className="space-y-6">

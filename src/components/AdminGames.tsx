@@ -254,20 +254,20 @@ export default function AdminGames() {
     <div className="space-y-8">
       {/* Gestão da Rodada (Consolidado) */}
       <div className="bg-zinc-900/50 border border-white/10 rounded-3xl p-8 space-y-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-white/5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-white/5">
           <div>
-            <h3 className="font-bebas text-3xl text-white tracking-wider flex items-center gap-3">
-              <Calendar size={28} className="text-green-primary" /> Gestão da Rodada
+            <h3 className="font-bebas text-2xl md:text-3xl text-white tracking-wider flex items-center gap-3">
+              <Calendar size={28} className="text-green-primary shrink-0" /> Gestão da Rodada
             </h3>
-            <p className="text-white-primary/40 text-xs font-bold uppercase tracking-widest mt-1">Configure os jogos e agende o início das apostas</p>
+            <p className="text-white-primary/40 text-[0.65rem] md:text-xs font-bold uppercase tracking-widest mt-1">Configure os jogos e agende o início das apostas</p>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="bg-yellow-primary/10 px-4 py-2 rounded-xl border border-yellow-primary/20">
-              <span className="text-yellow-primary font-bebas text-xl">{pendingGames.length} Jogos na Preparação</span>
+          <div className="flex flex-wrap items-center gap-3 md:gap-4">
+            <div className="bg-yellow-primary/10 px-3 md:px-4 py-2 rounded-xl border border-yellow-primary/20 shrink-0">
+              <span className="text-yellow-primary font-bebas text-lg md:text-xl">{pendingGames.length} Jogos na Preparação</span>
             </div>
             <button 
               onClick={toggleBetting}
-              className={`px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest transition-all flex items-center gap-2 ${config?.isBettingClosed ? 'bg-red-500 text-white' : 'bg-green-primary text-black'}`}
+              className={`px-4 md:px-6 py-2.5 rounded-xl font-bold text-[0.65rem] md:text-xs uppercase tracking-widest transition-all flex items-center gap-2 shrink-0 ${config?.isBettingClosed ? 'bg-red-500 text-white' : 'bg-green-primary text-black'}`}
             >
               {config?.isBettingClosed ? <Lock size={14} /> : <Unlock size={14} />}
               {config?.isBettingClosed ? 'Apostas Encerradas' : 'Apostas Abertas'}
@@ -409,19 +409,19 @@ export default function AdminGames() {
                     exit={{ opacity: 0, x: 10 }}
                     className="bg-white/5 border border-white/10 rounded-xl p-3 flex items-center justify-between gap-4 group"
                   >
-                    <div className="flex items-center gap-4 flex-1">
-                      <div className="w-6 h-6 bg-white/5 rounded flex items-center justify-center font-bebas text-xs text-white/40 shrink-0">
+                    <div className="flex items-center gap-2 md:gap-4 flex-1 min-w-0">
+                      <div className="w-6 h-6 bg-white/5 rounded flex items-center justify-center font-bebas text-[0.6rem] md:text-xs text-white/40 shrink-0">
                         {index + 1}
                       </div>
-                      <div className="flex items-center gap-3 flex-1">
-                        <div className="flex items-center gap-2 flex-1 justify-end">
-                          <span className="font-bebas text-lg text-right truncate">{game.team1}</span>
-                          {game.logo1 && <img src={game.logo1} alt="" className="w-6 h-6 object-contain" referrerPolicy="no-referrer" />}
+                      <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 md:gap-2 flex-1 justify-end min-w-0">
+                          <span className="font-bebas text-sm md:text-lg text-right truncate">{game.team1}</span>
+                          {game.logo1 && <img src={game.logo1} alt="" className="w-5 h-5 md:w-6 md:h-6 object-contain shrink-0" referrerPolicy="no-referrer" />}
                         </div>
-                        <span className="text-white/10 font-black italic text-[0.6rem] shrink-0">VS</span>
-                        <div className="flex items-center gap-2 flex-1 justify-start">
-                          {game.logo2 && <img src={game.logo2} alt="" className="w-6 h-6 object-contain" referrerPolicy="no-referrer" />}
-                          <span className="font-bebas text-lg text-left truncate">{game.team2}</span>
+                        <span className="text-white/10 font-black italic text-[0.5rem] md:text-[0.6rem] shrink-0">VS</span>
+                        <div className="flex items-center gap-1.5 md:gap-2 flex-1 justify-start min-w-0">
+                          {game.logo2 && <img src={game.logo2} alt="" className="w-5 h-5 md:w-6 md:h-6 object-contain shrink-0" referrerPolicy="no-referrer" />}
+                          <span className="font-bebas text-sm md:text-lg text-left truncate">{game.team2}</span>
                         </div>
                       </div>
                     </div>

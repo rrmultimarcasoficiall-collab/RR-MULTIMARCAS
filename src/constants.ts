@@ -58,6 +58,8 @@ export const DEFAULT_BOLAO_DATA: BolaoData = {
   nextRoundTitle: 'Próxima Rodada',
   nextRoundDate: '',
   nextRoundTime: '',
+  pixKey: '3c496ef8-44bd-4cc7-87b4-a2c950ca2e03',
+  pricePerTicket: 10,
 };
 
 export const STORAGE_KEY = 'bolao_cfg_v1';

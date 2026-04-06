@@ -35,7 +35,7 @@ service cloud.firestore {
           'deadline' in get(configPath).data && 
           get(configPath).data.deadline != "" && 
           get(configPath).data.deadline.size() >= 16 && 
-          request.time > timestamp(get(configPath).data.deadline.replace(" ", "T") + ":00Z")
+          request.time > timestamp(get(configPath).data.deadline + ":00Z")
         )
       );
     }
@@ -112,7 +112,7 @@ service cloud.firestore {
       allow list: if isAuthenticated() && (
         isAnyAdmin() || 
         isAuditOpen() || 
-        (request.query.filters.userId == request.auth.uid)
+        (resource.data.userId == request.auth.uid)
       );
       // Allow get if owner, admin or audit is open
       allow get: if isAuthenticated() && (

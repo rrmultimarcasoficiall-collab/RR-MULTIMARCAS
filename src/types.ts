@@ -49,6 +49,8 @@ export interface BolaoData {
   nextRoundTitle?: string;
   nextRoundDate?: string;
   nextRoundTime?: string;
+  pixKey?: string;
+  pricePerTicket?: number;
 }
 
 export interface Game {

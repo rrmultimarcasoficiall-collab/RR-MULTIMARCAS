@@ -29,8 +29,8 @@ export default function ClientGames({ userId, userProfile, onHitsUpdate, data }:
   const [pendingCartela, setPendingCartela] = useState<Cartela | null>(null);
   const [approvedCartelas, setApprovedCartelas] = useState<Cartela[]>([]);
 
-  const PIX_KEY = '3c496ef8-44bd-4cc7-87b4-a2c950ca2e03';
-  const PRICE_PER_TICKET = 10;
+  const PIX_KEY = data.pixKey || '3c496ef8-44bd-4cc7-87b4-a2c950ca2e03';
+  const PRICE_PER_TICKET = data.pricePerTicket || 10;
 
   useEffect(() => {
     if (!userId) return;
@@ -52,7 +52,7 @@ export default function ClientGames({ userId, userProfile, onHitsUpdate, data }:
       setGames(uniqueGames.sort((a, b) => a.order - b.order));
       setLoading(false);
     }, (error) => {
-      console.error('Error loading games in ClientGames:', error);
+      handleFirestoreError(error, OperationType.LIST, 'games');
       setLoading(false);
     });
 
@@ -69,7 +69,7 @@ export default function ClientGames({ userId, userProfile, onHitsUpdate, data }:
       setBets(betsData);
       setLocalBets(localData);
     }, (error) => {
-      console.error('Error loading bets in ClientGames:', error);
+      handleFirestoreError(error, OperationType.LIST, 'bets');
     });
 
     // Fetch pending cartela
@@ -141,7 +141,8 @@ export default function ClientGames({ userId, userProfile, onHitsUpdate, data }:
       await updateDoc(doc(db, 'users', userId), { betsSubmitted: true, paymentStatus: 'pending' });
       
       const message = `Olá! Fiz o pagamento de R$ ${totalAmount.toFixed(2)} referente a ${quantity} cartela(s) no Bolão FC. Segue o comprovante.`;
-      const whatsappUrl = `https://wa.me/5561993642412?text=${encodeURIComponent(message)}`;
+      const whatsappNumber = data.wn || '5561993642412';
+      const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
       window.open(whatsappUrl, '_blank');
       
       setShowPixModal(false);
@@ -193,37 +194,37 @@ export default function ClientGames({ userId, userProfile, onHitsUpdate, data }:
   return (
     <div className="space-y-8">
       {/* Painel de Transparência do Prêmio */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
         <motion.div 
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="bg-gradient-to-br from-green-primary/20 to-green-primary/5 border border-green-primary/20 rounded-3xl p-6 flex flex-col items-center justify-center text-center shadow-[0_0_40px_rgba(0,200,83,0.1)]"
+          className="bg-gradient-to-br from-green-primary/20 to-green-primary/5 border border-green-primary/20 rounded-2xl md:rounded-3xl p-4 md:p-6 flex flex-col items-center justify-center text-center shadow-[0_0_40px_rgba(0,200,83,0.1)]"
         >
-          <Trophy className="text-green-primary mb-2" size={32} />
-          <p className="text-[0.6rem] font-bold text-green-primary uppercase tracking-widest mb-1">Prêmio Estimado</p>
-          <h4 className="font-bebas text-4xl text-white-primary">R$ {estimatedPrize.toFixed(2)}</h4>
+          <Trophy className="text-green-primary mb-2 shrink-0" size={24} />
+          <p className="text-[0.55rem] md:text-[0.6rem] font-bold text-green-primary uppercase tracking-widest mb-1">Prêmio Estimado</p>
+          <h4 className="font-bebas text-2xl md:text-4xl text-white-primary">R$ {estimatedPrize.toFixed(2)}</h4>
         </motion.div>
 
         <motion.div 
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.1 }}
-          className="bg-zinc-900/50 border border-white/5 rounded-3xl p-6 flex flex-col items-center justify-center text-center"
+          className="bg-zinc-900/50 border border-white/5 rounded-2xl md:rounded-3xl p-4 md:p-6 flex flex-col items-center justify-center text-center"
         >
-          <User className="text-white-primary/40 mb-2" size={24} />
-          <p className="text-[0.6rem] font-bold text-white-primary/40 uppercase tracking-widest mb-1">Participantes Confirmados</p>
-          <h4 className="font-bebas text-3xl text-white-primary">{totalParticipants}</h4>
+          <User className="text-white-primary/40 mb-2 shrink-0" size={20} />
+          <p className="text-[0.55rem] md:text-[0.6rem] font-bold text-white-primary/40 uppercase tracking-widest mb-1">Participantes</p>
+          <h4 className="font-bebas text-2xl md:text-3xl text-white-primary">{totalParticipants}</h4>
         </motion.div>
 
         <motion.div 
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.2 }}
-          className="bg-zinc-900/50 border border-white/5 rounded-3xl p-6 flex flex-col items-center justify-center text-center"
+          className="col-span-2 md:col-span-1 bg-zinc-900/50 border border-white/5 rounded-2xl md:rounded-3xl p-4 md:p-6 flex flex-col items-center justify-center text-center"
         >
-          <DollarSign className="text-white-primary/40 mb-2" size={24} />
-          <p className="text-[0.6rem] font-bold text-white-primary/40 uppercase tracking-widest mb-1">Arrecadação Bruta</p>
-          <h4 className="font-bebas text-3xl text-white-primary">R$ {totalCollected.toFixed(2)}</h4>
+          <DollarSign className="text-white-primary/40 mb-2 shrink-0" size={20} />
+          <p className="text-[0.55rem] md:text-[0.6rem] font-bold text-white-primary/40 uppercase tracking-widest mb-1">Arrecadação Bruta</p>
+          <h4 className="font-bebas text-2xl md:text-3xl text-white-primary">R$ {totalCollected.toFixed(2)}</h4>
         </motion.div>
       </div>
 
