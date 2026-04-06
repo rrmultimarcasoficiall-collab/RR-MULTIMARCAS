@@ -326,70 +326,102 @@ export default function ClientGames({ userId, userProfile, onHitsUpdate, data }:
                 animate={{ opacity: 1, y: 0 }}
                 className="bg-zinc-900/30 border border-white/5 rounded-2xl overflow-hidden hover:border-white/10 transition-colors"
               >
-                <div className="p-4 md:p-6 flex flex-col md:flex-row items-center gap-6">
-                  {/* Team 1 */}
-                  <div className="flex-1 flex items-center justify-end gap-4 w-full">
-                    <div className="flex flex-col items-end flex-1 truncate">
-                      <span className="font-bebas text-xl md:text-2xl tracking-wide uppercase truncate w-full text-right">{game.team1}</span>
-                      {game.logo1 && <img src={game.logo1} alt="" className="w-8 h-8 object-contain mt-1" referrerPolicy="no-referrer" />}
+                <div className="p-4 md:p-6">
+                  {/* Cabeçalho do Jogo: Times e Logos */}
+                  <div className="flex items-center justify-between gap-3 mb-6">
+                    <div className="flex-1 flex flex-col items-center gap-2 min-w-0">
+                      <div className="w-14 h-14 md:w-20 md:h-20 bg-white/5 rounded-2xl flex items-center justify-center p-2 border border-white/5">
+                        {game.logo1 && (
+                          <img 
+                            src={game.logo1} 
+                            alt="" 
+                            className="max-w-full max-h-full object-contain" 
+                            referrerPolicy="no-referrer" 
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = 'https://cdn-icons-png.flaticon.com/512/53/53254.png';
+                            }}
+                          />
+                        )}
+                      </div>
+                      <span className="font-bebas text-base md:text-xl tracking-wide uppercase truncate w-full text-center text-white-primary/80">{game.team1}</span>
                     </div>
+
+                    <div className="flex flex-col items-center gap-1">
+                      <div className="bg-white/5 px-3 py-1 rounded-full border border-white/10">
+                        <span className="text-white/20 font-black italic text-sm md:text-base">VS</span>
+                      </div>
+                      <div className="text-[0.6rem] text-white-primary/30 font-mono mt-1">
+                        {game.time || (game.date ? new Date(game.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--')}
+                      </div>
+                    </div>
+
+                    <div className="flex-1 flex flex-col items-center gap-2 min-w-0">
+                      <div className="w-14 h-14 md:w-20 md:h-20 bg-white/5 rounded-2xl flex items-center justify-center p-2 border border-white/5">
+                        {game.logo2 && (
+                          <img 
+                            src={game.logo2} 
+                            alt="" 
+                            className="max-w-full max-h-full object-contain" 
+                            referrerPolicy="no-referrer" 
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = 'https://cdn-icons-png.flaticon.com/512/53/53254.png';
+                            }}
+                          />
+                        )}
+                      </div>
+                      <span className="font-bebas text-base md:text-xl tracking-wide uppercase truncate w-full text-center text-white-primary/80">{game.team2}</span>
+                    </div>
+                  </div>
+
+                  {/* Botões de Palpite */}
+                  <div className="grid grid-cols-3 gap-2 md:gap-4">
                     <button 
                       onClick={() => handleSelectPrediction(game.id, 'win1')}
                       disabled={game.result !== 'pending' || isLocked}
-                      className={`w-12 h-12 md:w-14 md:h-14 rounded-xl border-2 transition-all flex items-center justify-center text-xl font-black shrink-0 ${currentPrediction === 'win1' ? 'bg-green-primary border-green-primary text-black scale-110 shadow-[0_0_20px_rgba(0,200,83,0.4)]' : 'border-white/10 hover:border-green-primary/50 text-white/20'} ${(game.result !== 'pending' || isLocked) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      className={`flex flex-col items-center justify-center py-3 rounded-xl border-2 transition-all ${currentPrediction === 'win1' ? 'bg-green-primary border-green-primary text-black shadow-[0_0_20px_rgba(0,200,83,0.3)]' : 'bg-white/5 border-white/10 text-white/40 hover:border-green-primary/30'} ${(game.result !== 'pending' || isLocked) ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                      {currentPrediction === 'win1' ? 'X' : ''}
+                      <span className="text-[0.6rem] font-bold uppercase mb-1 opacity-60">Casa</span>
+                      <span className="font-black text-lg">{currentPrediction === 'win1' ? 'X' : '1'}</span>
                     </button>
-                  </div>
 
-                  {/* Draw */}
-                  <div className="flex flex-col items-center gap-2 shrink-0">
-                    <div className="text-[0.6rem] font-bold text-white-primary/20 uppercase tracking-tighter">Empate</div>
                     <button 
                       onClick={() => handleSelectPrediction(game.id, 'draw')}
                       disabled={game.result !== 'pending' || isLocked}
-                      className={`w-12 h-12 md:w-14 md:h-14 rounded-xl border-2 transition-all flex items-center justify-center text-xl font-black ${currentPrediction === 'draw' ? 'bg-yellow-primary border-yellow-primary text-black scale-110 shadow-[0_0_20px_rgba(255,214,0,0.4)]' : 'border-white/10 hover:border-yellow-primary/50 text-white/20'} ${(game.result !== 'pending' || isLocked) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      className={`flex flex-col items-center justify-center py-3 rounded-xl border-2 transition-all ${currentPrediction === 'draw' ? 'bg-yellow-primary border-yellow-primary text-black shadow-[0_0_20px_rgba(255,214,0,0.3)]' : 'bg-white/5 border-white/10 text-white/40 hover:border-yellow-primary/30'} ${(game.result !== 'pending' || isLocked) ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                      {currentPrediction === 'draw' ? 'X' : ''}
+                      <span className="text-[0.6rem] font-bold uppercase mb-1 opacity-60">Empate</span>
+                      <span className="font-black text-lg">{currentPrediction === 'draw' ? 'X' : 'X'}</span>
                     </button>
-                    <div className="text-[0.55rem] text-white-primary/30 font-mono mt-1">
-                      {game.time || (game.date ? new Date(game.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '--:--')}
-                    </div>
-                  </div>
 
-                  {/* Team 2 */}
-                  <div className="flex-1 flex items-center justify-start gap-4 w-full">
                     <button 
                       onClick={() => handleSelectPrediction(game.id, 'win2')}
                       disabled={game.result !== 'pending' || isLocked}
-                      className={`w-12 h-12 md:w-14 md:h-14 rounded-xl border-2 transition-all flex items-center justify-center text-xl font-black shrink-0 ${currentPrediction === 'win2' ? 'bg-red-500 border-red-500 text-white scale-110 shadow-[0_0_20px_rgba(239,68,68,0.4)]' : 'border-white/10 hover:border-red-500/50 text-white/20'} ${(game.result !== 'pending' || isLocked) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      className={`flex flex-col items-center justify-center py-3 rounded-xl border-2 transition-all ${currentPrediction === 'win2' ? 'bg-red-500 border-red-500 text-white shadow-[0_0_20px_rgba(239,68,68,0.3)]' : 'bg-white/5 border-white/10 text-white/40 hover:border-red-500/30'} ${(game.result !== 'pending' || isLocked) ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                      {currentPrediction === 'win2' ? 'X' : ''}
+                      <span className="text-[0.6rem] font-bold uppercase mb-1 opacity-60">Fora</span>
+                      <span className="font-black text-lg">{currentPrediction === 'win2' ? 'X' : '2'}</span>
                     </button>
-                    <div className="flex flex-col items-start flex-1 truncate">
-                      <span className="font-bebas text-xl md:text-2xl tracking-wide uppercase truncate w-full text-left">{game.team2}</span>
-                      {game.logo2 && <img src={game.logo2} alt="" className="w-8 h-8 object-contain mt-1" referrerPolicy="no-referrer" />}
-                    </div>
                   </div>
-                </div>
 
-                {/* Status Bar */}
-                <div className="bg-white/2 px-6 py-2 flex items-center justify-between border-t border-white/5">
-                  <div className="text-[0.6rem] text-white-primary/30 font-bold uppercase tracking-widest">
-                    {game.date ? new Date(game.date).toLocaleDateString('pt-BR') : 'Data não definida'}
-                  </div>
-                  
-                  <div className="flex items-center gap-3">
-                    {game.result !== 'pending' ? (
-                      <div className="flex items-center gap-2">
-                        {isCorrect && <span className="text-green-primary flex items-center gap-1 text-[0.6rem] font-black uppercase tracking-widest"><Trophy size={12} /> Acertou!</span>}
-                        {isWrong && <span className="text-red-400 flex items-center gap-1 text-[0.6rem] font-black uppercase tracking-widest"><AlertCircle size={12} /> Errou</span>}
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 text-[0.6rem] font-bold uppercase tracking-widest text-white-primary/20">
-                        <Clock size={10} /> {isLocked ? 'Encerrado' : 'Aberto'}
-                      </div>
-                    )}
+                  {/* Footer do Card */}
+                  <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-between">
+                    <div className="text-[0.65rem] font-bold text-white-primary/20 uppercase tracking-widest">
+                      {game.date ? new Date(game.date + 'T00:00:00').toLocaleDateString('pt-BR') : '--/--/----'}
+                    </div>
+                    
+                    <div className="flex items-center gap-3">
+                      {game.result !== 'pending' ? (
+                        <div className="flex items-center gap-2">
+                          {isCorrect && <span className="text-green-primary flex items-center gap-1 text-[0.6rem] font-black uppercase tracking-widest"><Trophy size={12} /> Acertou!</span>}
+                          {isWrong && <span className="text-red-400 flex items-center gap-1 text-[0.6rem] font-black uppercase tracking-widest"><AlertCircle size={12} /> Errou</span>}
+                        </div>
+                      ) : (
+                        <div className={`text-[0.65rem] font-bold uppercase tracking-widest flex items-center gap-1.5 ${isLocked ? 'text-white-primary/20' : 'text-green-primary'}`}>
+                          <div className={`w-1.5 h-1.5 rounded-full ${isLocked ? 'bg-white/20' : 'bg-green-primary animate-pulse'}`} />
+                          {isLocked ? 'Encerrado' : 'Aberto'}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </motion.div>
