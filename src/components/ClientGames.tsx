@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db, collection, doc, setDoc, onSnapshot, query, where, updateDoc, addDoc } from '../firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 import { Game, Bet, BolaoData, UserProfile, Cartela } from '../types';
-import { Check, Clock, Trophy, AlertCircle, Save, AlertTriangle, CreditCard, Copy, ExternalLink, QrCode, DollarSign, User, Calendar } from 'lucide-react';
+import { Check, Clock, Trophy, AlertCircle, Save, AlertTriangle, CreditCard, Copy, ExternalLink, QrCode, DollarSign, User, Calendar, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { QRCodeSVG } from 'qrcode.react';
 import { generatePixPayload } from '../lib/pix';
@@ -21,6 +21,7 @@ export default function ClientGames({ userId, userProfile, onHitsUpdate, data }:
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'my-bets'>('all');
   const [isConfirming, setIsConfirming] = useState(false);
+  const [isReviewing, setIsReviewing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showPixModal, setShowPixModal] = useState(false);
   const [quantity, setQuantity] = useState(1);
@@ -120,6 +121,7 @@ export default function ClientGames({ userId, userProfile, onHitsUpdate, data }:
     const total = quantity * PRICE_PER_TICKET;
     const payload = generatePixPayload(PIX_KEY, total);
     setPixPayload(payload);
+    setIsReviewing(false);
     setShowPixModal(true);
   };
 
@@ -141,8 +143,8 @@ export default function ClientGames({ userId, userProfile, onHitsUpdate, data }:
       await updateDoc(doc(db, 'users', userId), { betsSubmitted: true, paymentStatus: 'pending' });
       
       const message = `Olá! Fiz o pagamento de R$ ${totalAmount.toFixed(2)} referente a ${quantity} cartela(s) no Bolão FC. Segue o comprovante.`;
-      const whatsappNumber = data.wn || '5561993642412';
-      const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
+      const whatsappNumber = (data.wn || '5561993642412').replace(/\D/g, '');
+      const whatsappUrl = `https://api.whatsapp.com/send?phone=${whatsappNumber}&text=${encodeURIComponent(message)}`;
       window.open(whatsappUrl, '_blank');
       
       setShowPixModal(false);
@@ -452,13 +454,90 @@ export default function ClientGames({ userId, userProfile, onHitsUpdate, data }:
           </div>
 
           <button 
-            onClick={handleOpenPix}
+            onClick={() => setIsReviewing(true)}
             className="bg-green-primary text-black font-black px-12 py-4 rounded-2xl flex items-center gap-3 hover:scale-105 transition-all shadow-[0_0_30px_rgba(0,200,83,0.3)] group"
           >
-            <CreditCard size={20} className="group-hover:rotate-12 transition-transform" /> FAZER PAGAMENTO
+            <CreditCard size={20} className="group-hover:rotate-12 transition-transform" /> REVISAR E PAGAR
           </button>
         </div>
       )}
+
+      {/* Modal de Revisão */}
+      <AnimatePresence>
+        {isReviewing && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-[#111418] border border-white/10 rounded-3xl p-8 w-full max-w-2xl max-h-[90vh] flex flex-col"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="font-bebas text-3xl text-white tracking-wider">Revisar Palpites</h3>
+                <button 
+                  onClick={() => setIsReviewing(false)}
+                  className="p-2 hover:bg-white/5 rounded-xl transition-all text-white/20 hover:text-white"
+                >✕</button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto pr-2 space-y-3 scrollbar-hide mb-6">
+                {games.map((game) => {
+                  const prediction = localBets[game.id];
+                  if (!prediction) return null;
+                  return (
+                    <div key={game.id} className="bg-white/5 border border-white/5 rounded-xl p-3 flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="w-8 h-8 flex items-center justify-center shrink-0">
+                          <img src={game.logo1} alt="" className="max-w-full max-h-full object-contain" referrerPolicy="no-referrer" />
+                        </div>
+                        <span className="font-bebas text-sm uppercase truncate text-white/60">{game.team1}</span>
+                        <span className="text-white/10 font-black italic text-xs">VS</span>
+                        <span className="font-bebas text-sm uppercase truncate text-white/60">{game.team2}</span>
+                        <div className="w-8 h-8 flex items-center justify-center shrink-0">
+                          <img src={game.logo2} alt="" className="max-w-full max-h-full object-contain" referrerPolicy="no-referrer" />
+                        </div>
+                      </div>
+                      <div className={`px-4 py-1 rounded-lg font-black text-xs uppercase tracking-widest ${
+                        prediction === 'win1' ? 'bg-green-primary text-black' :
+                        prediction === 'draw' ? 'bg-yellow-primary text-black' :
+                        'bg-red-500 text-white'
+                      }`}>
+                        {prediction === 'win1' ? 'Casa' : prediction === 'draw' ? 'Empate' : 'Fora'}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="bg-yellow-primary/10 border border-yellow-primary/20 rounded-2xl p-4 mb-6 flex items-start gap-3">
+                <AlertTriangle className="text-yellow-primary shrink-0" size={20} />
+                <p className="text-xs text-white-primary/60 leading-relaxed">
+                  <strong className="text-white">Atenção:</strong> Após o pagamento, seus palpites serão bloqueados e não poderão ser alterados. Revise cuidadosamente antes de prosseguir.
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button 
+                  onClick={() => setIsReviewing(false)}
+                  className="flex-1 py-4 bg-white/5 hover:bg-white/10 text-white font-bold rounded-2xl transition-all border border-white/10 flex items-center justify-center gap-2"
+                >
+                  <RefreshCw size={18} /> REFAZER PALPITES
+                </button>
+                <button 
+                  onClick={handleOpenPix}
+                  className="flex-1 py-4 bg-green-primary text-black font-black rounded-2xl transition-all shadow-[0_0_20px_rgba(0,200,83,0.2)] flex items-center justify-center gap-2"
+                >
+                  <CreditCard size={18} /> CONFIRMAR E PAGAR
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Pix Modal */}
       <AnimatePresence>

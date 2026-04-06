@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db, collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc } from '../firebase';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 import { Team } from '../types';
-import { Trash2, Plus, Search, Smartphone, ShieldCheck } from 'lucide-react';
+import { Trash2, Plus, Search, Smartphone, ShieldCheck, Edit2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function AdminTeams() {
@@ -10,6 +10,7 @@ export default function AdminTeams() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isAdding, setIsAdding] = useState(false);
+  const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamLogo, setNewTeamLogo] = useState('');
   const [isBatchUploading, setIsBatchUploading] = useState(false);
@@ -30,16 +31,31 @@ export default function AdminTeams() {
   const handleAddTeam = async () => {
     if (!newTeamName || !newTeamLogo) return;
     try {
-      await addDoc(collection(db, 'teams'), {
-        name: newTeamName.trim(),
-        logo: newTeamLogo
-      });
+      if (editingTeam) {
+        await updateDoc(doc(db, 'teams', editingTeam.id), {
+          name: newTeamName.trim(),
+          logo: newTeamLogo
+        });
+      } else {
+        await addDoc(collection(db, 'teams'), {
+          name: newTeamName.trim(),
+          logo: newTeamLogo
+        });
+      }
       setNewTeamName('');
       setNewTeamLogo('');
       setIsAdding(false);
+      setEditingTeam(null);
     } catch (error) {
-      console.error('Error adding team:', error);
+      console.error('Error saving team:', error);
     }
+  };
+
+  const handleEditTeam = (team: Team) => {
+    setEditingTeam(team);
+    setNewTeamName(team.name);
+    setNewTeamLogo(team.logo);
+    setIsAdding(true);
   };
 
   const handleDeleteTeam = async (id: string) => {
@@ -159,12 +175,20 @@ export default function AdminTeams() {
               exit={{ opacity: 0, scale: 0.9 }}
               className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col items-center gap-3 group relative"
             >
-              <button 
-                onClick={() => handleDeleteTeam(team.id)}
-                className="absolute top-2 right-2 p-1.5 text-white-primary/20 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all opacity-0 group-hover:opacity-100"
-              >
-                <Trash2 size={14} />
-              </button>
+              <div className="absolute top-2 right-2 flex gap-1 opacity-100 md:opacity-0 lg:opacity-0 group-hover:opacity-100 transition-all">
+                <button 
+                  onClick={() => handleEditTeam(team)}
+                  className="p-1.5 text-white-primary/60 md:text-white-primary/20 hover:text-green-primary hover:bg-green-primary/10 rounded-lg transition-all bg-black/40 md:bg-transparent"
+                >
+                  <Edit2 size={14} />
+                </button>
+                <button 
+                  onClick={() => handleDeleteTeam(team.id)}
+                  className="p-1.5 text-white-primary/60 md:text-white-primary/20 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all bg-black/40 md:bg-transparent"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
               <div className="w-16 h-16 rounded-xl overflow-hidden bg-white/5 p-2 flex items-center justify-center">
                 <img src={team.logo} alt={team.name} className="w-full h-full object-contain" referrerPolicy="no-referrer" />
               </div>
@@ -182,8 +206,8 @@ export default function AdminTeams() {
             className="bg-[#111418] border border-white/10 rounded-3xl p-8 w-full max-w-md space-y-6"
           >
             <div className="flex items-center justify-between">
-              <h4 className="font-bebas text-2xl">Adicionar Novo Escudo</h4>
-              <button onClick={() => setIsAdding(false)} className="text-white-primary/40 hover:text-white">
+              <h4 className="font-bebas text-2xl">{editingTeam ? 'Editar Escudo' : 'Adicionar Novo Escudo'}</h4>
+              <button onClick={() => { setIsAdding(false); setEditingTeam(null); setNewTeamName(''); setNewTeamLogo(''); }} className="text-white-primary/40 hover:text-white">
                 <X size={24} />
               </button>
             </div>
@@ -254,7 +278,7 @@ export default function AdminTeams() {
                 disabled={!newTeamName || !newTeamLogo}
                 className="w-full py-4 bg-green-primary hover:bg-green-600 disabled:opacity-50 disabled:hover:bg-green-primary text-white font-bold rounded-2xl transition-all shadow-lg shadow-green-primary/20"
               >
-                SALVAR ESCUDO
+                {editingTeam ? 'ATUALIZAR ESCUDO' : 'SALVAR ESCUDO'}
               </button>
             )}
           </motion.div>
