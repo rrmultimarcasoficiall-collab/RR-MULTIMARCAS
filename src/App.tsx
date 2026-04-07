@@ -19,7 +19,8 @@ import {
   Plus,
   Trash2,
   Clock,
-  ArrowRight
+  ArrowRight,
+  LogOut
 } from 'lucide-react';
 import { BolaoData, UserProfile } from './types';
 import { DEFAULT_BOLAO_DATA, STORAGE_KEY } from './constants';
@@ -126,13 +127,16 @@ export default function App() {
 
   const handleAdminLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    if (adminLoginData.username === 'rodrigomarcos' && adminLoginData.password === 'rodrigomarcos001') {
+    
+    // SEGURANÇA REAL: Verifica se o perfil carregado do banco de dados tem a role 'admin'
+    if (userProfile?.role === 'admin') {
       setIsAdminLoggedIn(true);
       setShowAdminLogin(false);
       setAdminError('');
       setIsAdminVisible(true);
+      setToast('Acesso administrativo liberado!');
     } else {
-      setAdminError('Login ou senha incorretos.');
+      setAdminError('Você não tem permissão de administrador. Faça login com sua conta oficial.');
     }
   };
 
@@ -544,6 +548,17 @@ export default function App() {
                     <span className="hidden md:inline">Painel Admin</span>
                   </button>
                 )}
+
+                {userProfile && (
+                  <button 
+                    onClick={() => supabase.auth.signOut()}
+                    className="bg-zinc-900/80 backdrop-blur-sm border border-white/10 px-4 py-2.5 rounded-xl text-white-primary/70 hover:text-red-500 transition-all flex items-center gap-2 font-bold text-xs uppercase tracking-widest shadow-xl"
+                    title="Sair da Conta"
+                  >
+                    <LogOut size={16} />
+                    <span className="hidden md:inline">Sair</span>
+                  </button>
+                )}
               </div>
 
               {/* Admin Login Modal */}
@@ -569,25 +584,11 @@ export default function App() {
                       </div>
 
                       <form onSubmit={handleAdminLogin} className="space-y-4">
-                        <div className="space-y-1.5">
-                          <label className="text-[0.65rem] font-bold uppercase tracking-widest text-white-primary/40 ml-1">Usuário</label>
-                          <input 
-                            type="text" 
-                            value={adminLoginData.username}
-                            onChange={(e) => setAdminLoginData(prev => ({ ...prev, username: e.target.value }))}
-                            className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 outline-none focus:border-green-primary transition-all text-sm"
-                            placeholder="Seu usuário"
-                          />
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="text-[0.65rem] font-bold uppercase tracking-widest text-white-primary/40 ml-1">Senha</label>
-                          <input 
-                            type="password" 
-                            value={adminLoginData.password}
-                            onChange={(e) => setAdminLoginData(prev => ({ ...prev, password: e.target.value }))}
-                            className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 outline-none focus:border-green-primary transition-all text-sm"
-                            placeholder="Sua senha"
-                          />
+                        <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-2xl">
+                          <p className="text-[0.65rem] text-yellow-500 text-center leading-relaxed font-bold uppercase tracking-widest">
+                            Acesso administrativo validado pelo e-mail oficial: <br/>
+                            <span className="text-white mt-1 block">rrmultimarcasoficiall@gmail.com</span>
+                          </p>
                         </div>
 
                         {adminError && (
@@ -606,7 +607,7 @@ export default function App() {
                             type="submit"
                             className="flex-1 py-4 bg-green-primary hover:bg-green-600 text-black font-bold rounded-2xl transition-all shadow-lg"
                           >
-                            Entrar
+                            Entrar no Painel
                           </button>
                         </div>
                       </form>
