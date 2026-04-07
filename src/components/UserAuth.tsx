@@ -51,10 +51,13 @@ export default function UserAuth({ userProfile, onProfileUpdate }: UserAuthProps
             </button>
           </div>
         ) : (
-          <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-4 py-2 rounded-full text-white-primary/40 font-bold text-[10px] uppercase tracking-widest">
-            <UserIcon size={12} />
-            Modo Visitante
-          </div>
+          <button 
+            onClick={handleLogin}
+            className="flex items-center gap-2 bg-green-primary hover:bg-green-600 text-black px-4 py-2 rounded-full font-bold text-xs transition-all shadow-lg"
+          >
+            <LogIn size={14} />
+            Entrar com Google
+          </button>
         )}
       </div>
       {error && (

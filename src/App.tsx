@@ -110,7 +110,7 @@ export default function App() {
   const [completeLoading, setCompleteLoading] = useState(false);
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false);
   const [isAdminVisible, setIsAdminVisible] = useState(false);
-  const [adminLoginData, setAdminLoginData] = useState({ email: '' });
+  const [adminLoginData, setAdminLoginData] = useState({ email: '', password: '' });
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [adminError, setAdminError] = useState('');
   const [guestId, setGuestId] = useState<string | null>(null);
@@ -130,16 +130,22 @@ export default function App() {
     e.preventDefault();
     
     const typedEmail = adminLoginData.email.trim().toLowerCase();
+    const typedPassword = adminLoginData.password;
+    
     const isOfficialEmail = typedEmail === 'rrmultimarcasoficiall@gmail.com';
+    // Definindo uma senha padrão simples para segurança inicial
+    const isCorrectPassword = typedPassword === 'admin123';
 
-    if (isOfficialEmail) {
+    if (isOfficialEmail && isCorrectPassword) {
       setIsAdminLoggedIn(true);
       setShowAdminLogin(false);
       setAdminError('');
       setIsAdminVisible(true);
       setToast('Acesso administrativo liberado!');
+    } else if (!isOfficialEmail) {
+      setAdminError('E-mail não autorizado.');
     } else {
-      setAdminError('E-mail incorreto. Digite o e-mail oficial rrmultimarcasoficiall@gmail.com');
+      setAdminError('Senha incorreta.');
     }
   };
 
@@ -547,7 +553,7 @@ export default function App() {
                 ) : (
                   <button 
                     onClick={() => {
-                      setAdminLoginData({ email: '' });
+                      setAdminLoginData({ email: '', password: '' });
                       setAdminError('');
                       setShowAdminLogin(true);
                     }}
@@ -582,16 +588,30 @@ export default function App() {
                       </div>
 
                       <form onSubmit={handleAdminLogin} className="space-y-4">
-                        <div className="space-y-2">
-                          <label className="text-[0.65rem] font-bold uppercase tracking-widest text-white-primary/40 ml-1">Digite seu E-mail de Admin</label>
-                          <input 
-                            type="email" 
-                            value={adminLoginData.email}
-                            onChange={(e) => setAdminLoginData({ email: e.target.value })}
-                            className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 outline-none focus:border-green-primary transition-all text-sm text-white"
-                            placeholder="rrmultimarcasoficiall@gmail.com"
-                            required
-                          />
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <label className="text-[0.65rem] font-bold uppercase tracking-widest text-white-primary/40 ml-1">E-mail de Admin</label>
+                            <input 
+                              type="email" 
+                              value={adminLoginData.email}
+                              onChange={(e) => setAdminLoginData({ ...adminLoginData, email: e.target.value })}
+                              className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 outline-none focus:border-green-primary transition-all text-sm text-white"
+                              placeholder="seu-email@exemplo.com"
+                              required
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="text-[0.65rem] font-bold uppercase tracking-widest text-white-primary/40 ml-1">Senha de Acesso</label>
+                            <input 
+                              type="password" 
+                              value={adminLoginData.password}
+                              onChange={(e) => setAdminLoginData({ ...adminLoginData, password: e.target.value })}
+                              className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 outline-none focus:border-green-primary transition-all text-sm text-white"
+                              placeholder="••••••••"
+                              required
+                            />
+                          </div>
                         </div>
 
                         {adminError && (
