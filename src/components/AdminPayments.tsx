@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { db, collection, onSnapshot, updateDoc, doc, deleteDoc, setDoc } from '../firebase';
-import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
+import { supabase } from '../supabase';
 import { Cartela } from '../types';
-import { Check, X, Clock, User, Trash2, Search, Filter, CreditCard } from 'lucide-react';
+import { Check, X, User, Trash2, Search, Filter, CreditCard, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 type PaymentTab = 'all' | 'pending' | 'approved' | 'rejected';
@@ -12,24 +11,61 @@ export default function AdminPayments() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<PaymentTab>('pending');
+  const [cartelaToDelete, setCartelaToDelete] = useState<Cartela | null>(null);
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const fetchCartelas = async () => {
+    setIsRefreshing(true);
+    try {
+      const { data, error } = await supabase
+        .from('cartelas')
+        .select('*')
+        .order('timestamp', { ascending: false });
+      
+      if (error) {
+        console.error('Error fetching cartelas:', error);
+        setCartelas([]);
+      } else {
+        const formattedData = (data || []).map(item => ({
+          id: item.id,
+          userId: item.user_id,
+          userName: item.user_name,
+          userWhatsapp: item.user_whatsapp,
+          quantity: item.quantity,
+          totalAmount: item.total_amount,
+          paymentStatus: item.payment_status,
+          timestamp: item.timestamp,
+          predictions: item.predictions
+        } as Cartela));
+
+        setCartelas(formattedData);
+      }
+    } catch (error) {
+      console.error('Error fetching cartelas:', error);
+    } finally {
+      setLoading(false);
+      setIsRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'cartelas'), (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Cartela));
-      setCartelas(data.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
+    fetchCartelas();
+
+    // Safety timeout to prevent stuck loading
+    const timeoutId = setTimeout(() => {
       setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'cartelas');
-      setLoading(false);
-    });
-    return unsub;
+    }, 5000);
+
+    return () => clearTimeout(timeoutId);
   }, []);
 
   const filteredCartelas = useMemo(() => {
     return cartelas.filter(c => {
       const matchesSearch = 
         c.userName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.userId.toLowerCase().includes(searchQuery.toLowerCase());
+        c.userId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (c.userWhatsapp && c.userWhatsapp.includes(searchQuery));
       
       const matchesTab = activeTab === 'all' || c.paymentStatus === activeTab;
       
@@ -39,22 +75,48 @@ export default function AdminPayments() {
 
   const handleApprove = async (cartela: Cartela) => {
     try {
-      await updateDoc(doc(db, 'cartelas', cartela.id), { paymentStatus: 'approved' });
-      await updateDoc(doc(db, 'users', cartela.userId), { 
-        paymentStatus: 'approved',
-        betsSubmitted: true 
-      });
+      // 1. Update cartela status
+      const { error: cartelaError } = await supabase
+        .from('cartelas')
+        .update({ payment_status: 'approved' })
+        .eq('id', cartela.id);
+      if (cartelaError) throw cartelaError;
 
-      const savePromises = Object.entries(cartela.predictions).map(([gameId, prediction]) => {
-        const betId = `${cartela.userId}_${gameId}`;
-        return setDoc(doc(db, 'bets', betId), {
-          userId: cartela.userId,
-          gameId,
-          prediction,
-          timestamp: new Date().toISOString()
-        });
-      });
-      await Promise.all(savePromises);
+      // 2. Update user profile (optional for guests)
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', cartela.userId)
+        .single();
+
+      if (profile) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ 
+            payment_status: 'approved',
+            bets_submitted: true,
+            rejection_message: null
+          })
+          .eq('id', cartela.userId);
+        if (profileError) throw profileError;
+      }
+
+      // 3. Save bets
+      const betsToInsert = Object.entries(cartela.predictions).map(([gameId, prediction]) => ({
+        id: `${cartela.userId}_${gameId}`,
+        user_id: cartela.userId,
+        game_id: gameId,
+        prediction,
+        timestamp: new Date().toISOString()
+      }));
+
+      const { error: betsError } = await supabase
+        .from('bets')
+        .upsert(betsToInsert);
+      if (betsError) throw betsError;
+      
+      // Update local state
+      setCartelas(prev => prev.map(c => c.id === cartela.id ? { ...c, paymentStatus: 'approved' } : c));
     } catch (error) {
       console.error('Error approving payment:', error);
     }
@@ -62,19 +124,68 @@ export default function AdminPayments() {
 
   const handleReject = async (cartela: Cartela) => {
     try {
-      await updateDoc(doc(db, 'cartelas', cartela.id), { paymentStatus: 'rejected' });
-      await updateDoc(doc(db, 'users', cartela.userId), { 
-        paymentStatus: 'none',
-        betsSubmitted: false 
-      });
+      const { error: cartelaError } = await supabase
+        .from('cartelas')
+        .update({ payment_status: 'rejected' })
+        .eq('id', cartela.id);
+      if (cartelaError) throw cartelaError;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', cartela.userId)
+        .single();
+
+      if (profile) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ 
+            payment_status: 'rejected',
+            bets_submitted: false,
+            rejection_message: 'Seu pagamento foi recusado. Por favor, verifique o comprovante e tente novamente.'
+          })
+          .eq('id', cartela.userId);
+        if (profileError) throw profileError;
+      }
+
+      // Update local state
+      setCartelas(prev => prev.map(c => c.id === cartela.id ? { ...c, paymentStatus: 'rejected' } : c));
     } catch (error) {
       console.error('Error rejecting payment:', error);
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async () => {
+    if (!cartelaToDelete) return;
     try {
-      await deleteDoc(doc(db, 'cartelas', id));
+      const { error: deleteError } = await supabase
+        .from('cartelas')
+        .delete()
+        .eq('id', cartelaToDelete.id);
+      if (deleteError) throw deleteError;
+
+      // Reset user status so they can pay again (optional for guests)
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', cartelaToDelete.userId)
+        .single();
+
+      if (profile) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ 
+            payment_status: 'none',
+            bets_submitted: false,
+            rejection_message: null
+          })
+          .eq('id', cartelaToDelete.userId);
+        if (profileError) throw profileError;
+      }
+
+      // Update local state
+      setCartelas(prev => prev.filter(c => c.id !== cartelaToDelete.id));
+      setCartelaToDelete(null);
     } catch (error) {
       console.error('Error deleting cartela:', error);
     }
@@ -93,11 +204,21 @@ export default function AdminPayments() {
     <div className="space-y-8">
       {/* Header & Search */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h3 className="font-bebas text-3xl text-white-primary tracking-wider flex items-center gap-3">
-            <CreditCard size={28} className="text-green-primary" /> Gestão de Pagamentos
-          </h3>
-          <p className="text-white-primary/40 text-xs font-bold uppercase tracking-widest mt-1">Controle de cartelas e liberações</p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h3 className="font-bebas text-3xl text-white-primary tracking-wider flex items-center gap-3">
+              <CreditCard size={28} className="text-green-primary" /> Gestão de Pagamentos
+            </h3>
+            <p className="text-white-primary/40 text-xs font-bold uppercase tracking-widest mt-1">Controle de cartelas e liberações</p>
+          </div>
+          <button 
+            onClick={fetchCartelas}
+            disabled={isRefreshing}
+            className="p-2 bg-white/5 text-white-primary/40 rounded-xl hover:bg-white/10 hover:text-white transition-all disabled:opacity-50"
+            title="Atualizar Lista"
+          >
+            <RefreshCw size={18} className={isRefreshing ? 'animate-spin' : ''} />
+          </button>
         </div>
 
         <div className="relative group w-full md:w-80">
@@ -167,7 +288,12 @@ export default function AdminPayments() {
                       {c.paymentStatus === 'approved' && <Check size={14} className="text-green-primary" />}
                       {c.paymentStatus === 'rejected' && <X size={14} className="text-red-500" />}
                     </h4>
-                    <p className="text-xs text-white-primary/40">{new Date(c.timestamp).toLocaleString('pt-BR')}</p>
+                    <div className="flex items-center gap-3">
+                      <p className="text-xs text-white-primary/40">{new Date(c.timestamp).toLocaleString('pt-BR')}</p>
+                      {c.userWhatsapp && (
+                        <p className="text-xs text-green-primary/60 font-bold">WPP: {c.userWhatsapp}</p>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -223,7 +349,7 @@ export default function AdminPayments() {
                   )}
 
                   <button 
-                    onClick={() => handleDelete(c.id)}
+                    onClick={() => setCartelaToDelete(c)}
                     className="p-3 bg-white/5 text-white-primary/20 hover:bg-red-500 hover:text-white rounded-xl transition-all"
                     title="Excluir Registro"
                   >
@@ -235,6 +361,40 @@ export default function AdminPayments() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Modal de Confirmação de Exclusão */}
+      {cartelaToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-white/10 rounded-3xl p-8 max-w-md w-full space-y-6">
+            <div className="flex items-center gap-4 text-red-500">
+              <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
+                <Trash2 size={24} />
+              </div>
+              <h4 className="font-bebas text-2xl">Excluir Registro?</h4>
+            </div>
+            
+            <p className="text-white-primary/60 text-sm leading-relaxed">
+              Tem certeza que deseja excluir o registro de pagamento de <span className="text-white font-bold">{cartelaToDelete.userName}</span>? 
+              O usuário poderá enviar um novo comprovante após a exclusão.
+            </p>
+
+            <div className="flex gap-3 pt-4">
+              <button 
+                onClick={() => setCartelaToDelete(null)}
+                className="flex-1 px-6 py-3 bg-white/5 text-white font-bold rounded-xl hover:bg-white/10 transition-all"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleDelete}
+                className="flex-1 px-6 py-3 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 transition-all"
+              >
+                Confirmar Exclusão
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

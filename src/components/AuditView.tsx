@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, type RefObject } from 'react';
-import { db, collection, onSnapshot, doc } from '../firebase';
+import { supabase } from '../supabase';
 import { Game, Bet, UserProfile, BolaoData } from '../types';
-import { Search, ShieldCheck, Download, User as UserIcon, Calendar, Maximize2, X, CheckCircle } from 'lucide-react';
+import { Search, ShieldCheck, Download, User as UserIcon, Calendar, Maximize2, X, CheckCircle, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import html2canvas from 'html2canvas';
 
@@ -130,7 +130,7 @@ export default function AuditView({ currentUser }: { currentUser: UserProfile | 
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSheet, setSelectedSheet] = useState<{ user: UserProfile, bets: Bet[], idx: number } | null>(null);
-  const [config, setConfig] = useState<BolaoData | null>(null);
+  const [config, setConfig] = useState<Partial<BolaoData> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isDownloading, setIsDownloading] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -161,27 +161,153 @@ export default function AuditView({ currentUser }: { currentUser: UserProfile | 
     }
   };
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const fetchAuditData = async () => {
+    if (!config) return;
+    
+    const isDeadlinePassed = config.deadline && new Date() > new Date(config.deadline.includes('T') ? config.deadline + ":00Z" : config.deadline);
+    const isAuditOpen = config.isAuditReady || isDeadlinePassed;
+
+    if (!isAuditOpen) return;
+
+    setIsRefreshing(true);
+    try {
+      // Fetch Games
+      const { data: gamesData, error: gamesError } = await supabase
+        .from('games')
+        .select('*')
+        .order('order', { ascending: true });
+      if (gamesError) throw gamesError;
+      
+      const formattedGames = gamesData.map(g => ({
+        id: g.id,
+        team1: g.home_team,
+        team2: g.away_team,
+        logo1: g.home_logo,
+        logo2: g.away_logo,
+        date: g.date,
+        time: g.time,
+        result: g.result,
+        order: g.order
+      } as Game));
+      setGames(formattedGames);
+
+      // Fetch Bets
+      const { data: betsData, error: betsError } = await supabase
+        .from('bets')
+        .select('*');
+      if (betsError) throw betsError;
+      
+      const formattedBets = betsData.map(b => ({
+        id: b.id,
+        userId: b.user_id,
+        gameId: b.game_id,
+        prediction: b.prediction,
+        timestamp: b.timestamp
+      } as Bet));
+      setAllBets(formattedBets);
+
+      // Fetch Users
+      const { data: usersData, error: usersError } = await supabase
+        .from('profiles')
+        .select('*');
+      if (usersError) throw usersError;
+      
+      const formattedUsers = usersData.map(u => ({
+        uid: u.id,
+        displayName: u.display_name,
+        email: u.email,
+        photoURL: u.photo_url,
+        role: u.role,
+        status: u.status,
+        betsSubmitted: u.bets_submitted,
+        paymentStatus: u.payment_status,
+        phone: u.phone
+      } as UserProfile));
+      setUsers(formattedUsers);
+      
+      setLoading(false);
+      setError(null);
+    } catch (err: any) {
+      console.error('Error loading audit data:', err);
+      setError('Erro ao carregar dados da auditoria.');
+      setLoading(false);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   useEffect(() => {
-    // 1. Load config first to check if audit is actually open
-    const unsubConfig = onSnapshot(doc(db, 'config', 'main'), (snapshot) => {
-      if (snapshot.exists()) {
-        const data = snapshot.data() as BolaoData;
-        setConfig(data);
-        
-        // Only start other listeners if audit is ready or deadline passed
-        const isDeadlinePassed = data.deadline && new Date() > new Date(data.deadline.includes('T') ? data.deadline + ":00Z" : data.deadline);
-        const isAuditOpen = data.isAuditReady || isDeadlinePassed;
+    if (config) {
+      fetchAuditData();
+    }
+  }, [config]);
 
-        if (isAuditOpen) {
-          setError(null);
-        } else {
-          setError('A auditoria ainda não está disponível. Aguarde o encerramento das apostas.');
-          setLoading(false);
-        }
+  useEffect(() => {
+    const loadConfig = async () => {
+      const { data, error } = await supabase
+        .from('config')
+        .select('*')
+        .eq('id', 'main')
+        .single();
+      
+      if (error) {
+        console.error('Error loading config in AuditView:', error);
+        return;
       }
-    });
 
-    return () => unsubConfig();
+      const formattedConfig = {
+        id: data.id,
+        nextRoundTitle: data.next_round_title,
+        nextRoundDate: data.next_round_date,
+        nextRoundTime: data.next_round_time,
+        deadline: data.deadline,
+        isBettingClosed: data.is_betting_closed,
+        isAuditReady: data.is_audit_ready,
+        isOverrideClosed: data.is_override_closed,
+        backgroundImage: data.background_image,
+        welcomeText: data.welcome_text
+      } as Partial<BolaoData>;
+
+      setConfig(formattedConfig);
+
+      const isDeadlinePassed = formattedConfig.deadline && new Date() > new Date(formattedConfig.deadline.includes('T') ? formattedConfig.deadline + ":00Z" : formattedConfig.deadline);
+      const isAuditOpen = formattedConfig.isAuditReady || isDeadlinePassed;
+
+      if (isAuditOpen) {
+        setError(null);
+      } else {
+        setError('A auditoria ainda não está disponível. Aguarde o encerramento das apostas.');
+        setLoading(false);
+      }
+    };
+
+    loadConfig();
+
+    const channel = supabase
+      .channel('audit_config')
+      .on('postgres_changes', { event: 'UPDATE', table: 'config', schema: 'public', filter: 'id=eq.main' }, (payload) => {
+        const data = payload.new as any;
+        const formattedConfig = {
+          id: data.id,
+          nextRoundTitle: data.next_round_title,
+          nextRoundDate: data.next_round_date,
+          nextRoundTime: data.next_round_time,
+          deadline: data.deadline,
+          isBettingClosed: data.is_betting_closed,
+          isAuditReady: data.is_audit_ready,
+          isOverrideClosed: data.is_override_closed,
+          backgroundImage: data.background_image,
+          welcomeText: data.welcome_text
+        } as Partial<BolaoData>;
+        setConfig(formattedConfig);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   useEffect(() => {
@@ -192,39 +318,31 @@ export default function AuditView({ currentUser }: { currentUser: UserProfile | 
 
     if (!isAuditOpen) return;
 
-    const unsubGames = onSnapshot(collection(db, 'games'), (snapshot) => {
-      const gamesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
-      setGames(gamesData.sort((a, b) => a.order - b.order));
-    }, (err) => {
-      console.error('Error loading games in AuditView:', err);
-    });
+    const gamesChannel = supabase
+      .channel('audit_games')
+      .on('postgres_changes', { event: '*', table: 'games', schema: 'public' }, () => {
+        fetchAuditData();
+      })
+      .subscribe();
 
-    const unsubBets = onSnapshot(collection(db, 'bets'), (snapshot) => {
-      const betsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Bet));
-      setAllBets(betsData);
-    }, (err) => {
-      console.error('Error loading bets in AuditView:', err);
-      if (err.message.includes('permissions')) {
-        setError('Você não tem permissão para ver as apostas ainda.');
-      }
-    });
+    const betsChannel = supabase
+      .channel('audit_bets')
+      .on('postgres_changes', { event: '*', table: 'bets', schema: 'public' }, () => {
+        fetchAuditData();
+      })
+      .subscribe();
 
-    const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-      const usersData = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
-      setUsers(usersData);
-      setLoading(false);
-    }, (err) => {
-      console.error('Error loading users in AuditView:', err);
-      setLoading(false);
-      if (err.message.includes('permissions')) {
-        setError('Você não tem permissão para ver os usuários ainda.');
-      }
-    });
+    const usersChannel = supabase
+      .channel('audit_users')
+      .on('postgres_changes', { event: '*', table: 'profiles', schema: 'public' }, () => {
+        fetchAuditData();
+      })
+      .subscribe();
 
     return () => {
-      unsubGames();
-      unsubBets();
-      unsubUsers();
+      supabase.removeChannel(gamesChannel);
+      supabase.removeChannel(betsChannel);
+      supabase.removeChannel(usersChannel);
     };
   }, [config]);
 
@@ -282,9 +400,19 @@ export default function AuditView({ currentUser }: { currentUser: UserProfile | 
                 <ShieldCheck size={14} /> Verificado
               </p>
             </div>
-            <button className="p-2 bg-green-primary/10 text-green-primary rounded-lg hover:bg-green-primary/20 transition-all">
-              <Download size={20} />
-            </button>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={fetchAuditData}
+                disabled={isRefreshing}
+                className="p-2 bg-white/5 text-white-primary/40 rounded-lg hover:bg-white/10 hover:text-white transition-all disabled:opacity-50"
+                title="Atualizar Dados"
+              >
+                <Download size={20} className={isRefreshing ? 'animate-spin' : ''} />
+              </button>
+              <button className="p-2 bg-green-primary/10 text-green-primary rounded-lg hover:bg-green-primary/20 transition-all">
+                <Download size={20} />
+              </button>
+            </div>
           </div>
         </div>
       </div>

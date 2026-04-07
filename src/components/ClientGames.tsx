@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db, collection, doc, setDoc, onSnapshot, query, where, updateDoc, addDoc } from '../firebase';
-import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
+import { supabase } from '../supabase';
 import { Game, Bet, BolaoData, UserProfile, Cartela } from '../types';
 import { Check, Clock, Trophy, AlertCircle, Save, AlertTriangle, CreditCard, Copy, ExternalLink, QrCode, DollarSign, User, Calendar, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -15,6 +14,8 @@ interface ClientGamesProps {
 }
 
 export default function ClientGames({ userId, userProfile, onHitsUpdate, data }: ClientGamesProps) {
+  const PRICE_PER_TICKET = data.pricePerTicket || 10;
+  const PIX_KEY = data.pixKey || '';
   const [games, setGames] = useState<Game[]>([]);
   const [bets, setBets] = useState<Record<string, Bet>>({});
   const [localBets, setLocalBets] = useState<Record<string, 'win1' | 'draw' | 'win2'>>({});
@@ -29,67 +30,149 @@ export default function ClientGames({ userId, userProfile, onHitsUpdate, data }:
   const [isCopying, setIsCopying] = useState(false);
   const [pendingCartela, setPendingCartela] = useState<Cartela | null>(null);
   const [approvedCartelas, setApprovedCartelas] = useState<Cartela[]>([]);
+  const [isRefreshingPrize, setIsRefreshingPrize] = useState(false);
 
-  const PIX_KEY = data.pixKey || '3c496ef8-44bd-4cc7-87b4-a2c950ca2e03';
-  const PRICE_PER_TICKET = data.pricePerTicket || 10;
+  // Guest Info States
+  const [guestName, setGuestName] = useState('');
+  const [guestSurname, setGuestSurname] = useState('');
+  const [guestWhatsapp, setGuestWhatsapp] = useState('');
+  const [showGuestForm, setShowGuestForm] = useState(false);
+  const [guestFormError, setGuestFormError] = useState('');
+
+  const fetchApprovedCartelas = async () => {
+    setIsRefreshingPrize(true);
+    try {
+      const { data, error } = await supabase
+        .from('cartelas')
+        .select('*')
+        .eq('payment_status', 'approved');
+      
+      if (error) throw error;
+
+      const formattedData = data.map(item => ({
+        id: item.id,
+        userId: item.user_id,
+        userName: item.user_name,
+        quantity: item.quantity,
+        totalAmount: item.total_amount,
+        paymentStatus: item.payment_status,
+        timestamp: item.timestamp,
+        predictions: item.predictions
+      } as Cartela));
+
+      setApprovedCartelas(formattedData);
+    } catch (error) {
+      console.error('Error fetching approved cartelas:', error);
+    } finally {
+      setIsRefreshingPrize(false);
+    }
+  };
 
   useEffect(() => {
-    if (!userId) return;
+    const fetchData = async () => {
+      try {
+        // Fetch Games
+        const { data: gamesData, error: gamesError } = await supabase
+          .from('games')
+          .select('*')
+          .order('order', { ascending: true });
+        
+        if (gamesError) {
+          console.error('Error fetching games:', gamesError);
+          setGames([]);
+        } else {
+          setGames((gamesData || []).map(g => ({
+            id: g.id,
+            team1: g.home_team,
+            team2: g.away_team,
+            logo1: g.home_logo,
+            logo2: g.away_logo,
+            date: g.date,
+            time: g.time,
+            result: g.result,
+            order: g.order
+          } as Game)));
+        }
 
-    // Fetch approved cartelas for transparency
-    const qApproved = query(collection(db, 'cartelas'), where('paymentStatus', '==', 'approved'));
-    const unsubApproved = onSnapshot(qApproved, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Cartela));
-      setApprovedCartelas(data);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'cartelas (approved)');
-    });
+        if (userId) {
+          // Fetch User Bets
+          const { data: betsData, error: betsError } = await supabase
+            .from('bets')
+            .select('*')
+            .eq('user_id', userId);
+          
+          if (!betsError && betsData) {
+            const betsMap: Record<string, Bet> = {};
+            const localData: Record<string, 'win1' | 'draw' | 'win2'> = {};
+            betsData.forEach(b => {
+              const bet = {
+                id: b.id,
+                userId: b.user_id,
+                gameId: b.game_id,
+                prediction: b.prediction,
+                timestamp: b.timestamp
+              } as Bet;
+              betsMap[bet.gameId] = bet;
+              localData[bet.gameId] = bet.prediction;
+            });
+            setBets(betsMap);
+            setLocalBets(localData);
+          }
 
-    // Fetch games
-    const unsubGames = onSnapshot(collection(db, 'games'), (snapshot) => {
-      const gamesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
-      // Garantir que não haja duplicatas por ID
-      const uniqueGames = Array.from(new Map(gamesData.map(g => [g.id, g])).values());
-      setGames(uniqueGames.sort((a, b) => a.order - b.order));
-      setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'games');
-      setLoading(false);
-    });
-
-    // Fetch user bets
-    const q = query(collection(db, 'bets'), where('userId', '==', userId));
-    const unsubBets = onSnapshot(q, (snapshot) => {
-      const betsData: Record<string, Bet> = {};
-      const localData: Record<string, 'win1' | 'draw' | 'win2'> = {};
-      snapshot.docs.forEach(doc => {
-        const bet = { id: doc.id, ...doc.data() } as Bet;
-        betsData[bet.gameId] = bet;
-        localData[bet.gameId] = bet.prediction;
-      });
-      setBets(betsData);
-      setLocalBets(localData);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'bets');
-    });
-
-    // Fetch pending cartela
-    const qCartelas = query(collection(db, 'cartelas'), where('userId', '==', userId), where('paymentStatus', '==', 'pending'));
-    const unsubCartelas = onSnapshot(qCartelas, (snapshot) => {
-      if (!snapshot.empty) {
-        setPendingCartela({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Cartela);
-      } else {
-        setPendingCartela(null);
+          // Fetch Pending Cartela
+          const { data: cartelasData, error: cartelasError } = await supabase
+            .from('cartelas')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('payment_status', 'pending')
+            .limit(1);
+          
+          if (!cartelasError && cartelasData && cartelasData.length > 0) {
+            const item = cartelasData[0];
+            setPendingCartela({
+              id: item.id,
+              userId: item.user_id,
+              userName: item.user_name,
+              quantity: item.quantity,
+              totalAmount: item.total_amount,
+              paymentStatus: item.payment_status,
+              timestamp: item.timestamp,
+              predictions: item.predictions
+            } as Cartela);
+          } else {
+            setPendingCartela(null);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching client data:', error);
+      } finally {
+        setLoading(false);
       }
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'cartelas (pending)');
-    });
+    };
+
+    // Safety timeout to prevent stuck loading
+    const timeoutId = setTimeout(() => {
+      setLoading(false);
+    }, 5000);
+
+    fetchData();
+    fetchApprovedCartelas();
+
+    // Real-time subscriptions
+    const gamesChannel = supabase.channel('client-games')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'games' }, () => fetchData());
+    
+    if (userId) {
+      gamesChannel
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'bets', filter: `user_id=eq.${userId}` }, () => fetchData())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'cartelas', filter: `user_id=eq.${userId}` }, () => fetchData());
+    }
+
+    gamesChannel.subscribe();
 
     return () => {
-      unsubApproved();
-      unsubGames();
-      unsubBets();
-      unsubCartelas();
+      clearTimeout(timeoutId);
+      supabase.removeChannel(gamesChannel);
     };
   }, [userId]);
 
@@ -106,9 +189,13 @@ export default function ClientGames({ userId, userProfile, onHitsUpdate, data }:
     }
   }, [games, bets, onHitsUpdate]);
 
+  const now = new Date();
+  const deadlineDate = data.deadline ? new Date(data.deadline) : null;
+  const isPastDeadline = deadlineDate ? now > deadlineDate : false;
+
   const isLocked = userProfile?.betsSubmitted || 
     (!data.isOverrideClosed && (
-      data.isBettingClosed
+      data.isBettingClosed || isPastDeadline
     )) || !!pendingCartela;
 
   const handleSelectPrediction = (gameId: string, prediction: Bet['prediction']) => {
@@ -118,6 +205,15 @@ export default function ClientGames({ userId, userProfile, onHitsUpdate, data }:
 
   const handleOpenPix = () => {
     if (Object.keys(localBets).length === 0) return;
+    
+    // If user is not logged in as admin (meaning they are a guest), require info
+    if (!userProfile) {
+      if (!guestName || !guestSurname || !guestWhatsapp) {
+        setShowGuestForm(true);
+        return;
+      }
+    }
+
     const total = quantity * PRICE_PER_TICKET;
     const payload = generatePixPayload(PIX_KEY, total);
     setPixPayload(payload);
@@ -125,22 +221,43 @@ export default function ClientGames({ userId, userProfile, onHitsUpdate, data }:
     setShowPixModal(true);
   };
 
+  const handleGuestSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!guestName || !guestSurname || !guestWhatsapp) {
+      setGuestFormError('Por favor, preencha todos os campos.');
+      return;
+    }
+    setGuestFormError('');
+    setShowGuestForm(false);
+    handleOpenPix();
+  };
+
   const handleConfirmPayment = async () => {
     setIsSaving(true);
     try {
       const totalAmount = quantity * PRICE_PER_TICKET;
-      const cartelaData = {
-        userId,
-        userName: userProfile?.displayName || 'Usuário',
-        predictions: localBets,
-        paymentStatus: 'pending',
-        timestamp: new Date().toISOString(),
-        quantity,
-        totalAmount
-      };
       
-      await addDoc(collection(db, 'cartelas'), cartelaData);
-      await updateDoc(doc(db, 'users', userId), { betsSubmitted: true, paymentStatus: 'pending' });
+      const { error: cartelaError } = await supabase.from('cartelas').insert([
+        {
+          user_id: userId,
+          user_name: userProfile?.displayName || `${guestName} ${guestSurname}`,
+          user_whatsapp: guestWhatsapp || userProfile?.phone || '',
+          predictions: localBets,
+          payment_status: 'pending',
+          timestamp: new Date().toISOString(),
+          quantity,
+          total_amount: totalAmount
+        }
+      ]);
+      
+      if (cartelaError) throw cartelaError;
+
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ bets_submitted: true, payment_status: 'pending' })
+        .eq('id', userId);
+      
+      if (profileError) throw profileError;
       
       const message = `Olá! Fiz o pagamento de R$ ${totalAmount.toFixed(2)} referente a ${quantity} cartela(s) no Bolão FC. Segue o comprovante.`;
       const whatsappNumber = (data.wn || '5561993642412').replace(/\D/g, '');
@@ -167,16 +284,23 @@ export default function ClientGames({ userId, userProfile, onHitsUpdate, data }:
     setIsSaving(true);
     try {
       const savePromises = Object.entries(localBets).map(([gameId, prediction]) => {
-        const betId = `${userId}_${gameId}`;
-        return setDoc(doc(db, 'bets', betId), {
-          userId,
-          gameId,
+        return supabase.from('bets').upsert({
+          id: `${userId}_${gameId}`,
+          user_id: userId,
+          game_id: gameId,
           prediction,
           timestamp: new Date().toISOString()
         });
       });
       await Promise.all(savePromises);
-      await updateDoc(doc(db, 'users', userId), { betsSubmitted: true });
+      
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ bets_submitted: true })
+        .eq('id', userId);
+      
+      if (profileError) throw profileError;
+
       setIsConfirming(false);
     } catch (error) {
       console.error('Error saving bets:', error);
@@ -200,8 +324,16 @@ export default function ClientGames({ userId, userProfile, onHitsUpdate, data }:
         <motion.div 
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="bg-gradient-to-br from-green-primary/20 to-green-primary/5 border border-green-primary/20 rounded-2xl md:rounded-3xl p-4 md:p-6 flex flex-col items-center justify-center text-center shadow-[0_0_40px_rgba(0,200,83,0.1)]"
+          className="bg-gradient-to-br from-green-primary/20 to-green-primary/5 border border-green-primary/20 rounded-2xl md:rounded-3xl p-4 md:p-6 flex flex-col items-center justify-center text-center shadow-[0_0_40px_rgba(0,200,83,0.1)] relative group"
         >
+          <button 
+            onClick={fetchApprovedCartelas}
+            disabled={isRefreshingPrize}
+            className="absolute top-2 right-2 p-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-white-primary/20 hover:text-green-primary transition-all opacity-0 group-hover:opacity-100 disabled:opacity-50"
+            title="Atualizar Prêmio"
+          >
+            <RefreshCw size={12} className={isRefreshingPrize ? 'animate-spin' : ''} />
+          </button>
           <Trophy className="text-green-primary mb-2 shrink-0" size={24} />
           <p className="text-[0.55rem] md:text-[0.6rem] font-bold text-green-primary uppercase tracking-widest mb-1">Prêmio Estimado</p>
           <h4 className="font-bebas text-2xl md:text-4xl text-white-primary">R$ {estimatedPrize.toFixed(2)}</h4>
@@ -229,6 +361,20 @@ export default function ClientGames({ userId, userProfile, onHitsUpdate, data }:
           <h4 className="font-bebas text-2xl md:text-3xl text-white-primary">R$ {totalCollected.toFixed(2)}</h4>
         </motion.div>
       </div>
+
+      {userProfile?.rejectionMessage && !pendingCartela && !userProfile.betsSubmitted && (
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-red-500/10 border border-red-500/30 rounded-2xl p-6 text-center"
+        >
+          <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">❌</div>
+          <h4 className="font-bebas text-2xl text-red-500 mb-2">Pagamento Recusado!</h4>
+          <p className="text-white-primary/60 text-sm">
+            {userProfile.rejectionMessage}
+          </p>
+        </motion.div>
+      )}
 
       {pendingCartela && (
         <motion.div 
@@ -534,6 +680,88 @@ export default function ClientGames({ userId, userProfile, onHitsUpdate, data }:
                   <CreditCard size={18} /> CONFIRMAR E PAGAR
                 </button>
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Guest Info Modal */}
+      <AnimatePresence>
+        {showGuestForm && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="bg-[#111418] border border-white/10 rounded-3xl p-8 w-full max-w-md space-y-6 shadow-2xl"
+            >
+              <div className="text-center space-y-2">
+                <div className="w-16 h-16 bg-green-primary/20 rounded-full flex items-center justify-center mx-auto text-green-primary mb-4">
+                  <User size={32} />
+                </div>
+                <h3 className="font-bebas text-4xl text-white">Identifique-se</h3>
+                <p className="text-white-primary/60 text-sm">Para validar sua cartela, precisamos dos seus dados.</p>
+              </div>
+
+              <form onSubmit={handleGuestSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[0.65rem] font-bold uppercase tracking-widest text-white-primary/40 ml-1">Nome</label>
+                    <input 
+                      type="text" 
+                      value={guestName}
+                      onChange={(e) => setGuestName(e.target.value)}
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 outline-none focus:border-green-primary transition-all text-sm"
+                      placeholder="Seu nome"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[0.65rem] font-bold uppercase tracking-widest text-white-primary/40 ml-1">Sobrenome</label>
+                    <input 
+                      type="text" 
+                      value={guestSurname}
+                      onChange={(e) => setGuestSurname(e.target.value)}
+                      className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 outline-none focus:border-green-primary transition-all text-sm"
+                      placeholder="Seu sobrenome"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[0.65rem] font-bold uppercase tracking-widest text-white-primary/40 ml-1">WhatsApp</label>
+                  <input 
+                    type="tel" 
+                    value={guestWhatsapp}
+                    onChange={(e) => setGuestWhatsapp(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 outline-none focus:border-green-primary transition-all text-sm"
+                    placeholder="(00) 00000-0000"
+                  />
+                </div>
+
+                {guestFormError && (
+                  <p className="text-red-400 text-xs font-bold text-center bg-red-400/10 py-2 rounded-lg border border-red-400/20">{guestFormError}</p>
+                )}
+
+                <div className="flex gap-3">
+                  <button 
+                    type="button"
+                    onClick={() => setShowGuestForm(false)}
+                    className="flex-1 py-4 bg-white/5 hover:bg-white/10 text-white font-bold rounded-2xl transition-all border border-white/10"
+                  >
+                    Voltar
+                  </button>
+                  <button 
+                    type="submit"
+                    className="flex-1 py-4 bg-green-primary hover:bg-green-600 text-black font-bold rounded-2xl transition-all shadow-lg"
+                  >
+                    Continuar
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </motion.div>
         )}

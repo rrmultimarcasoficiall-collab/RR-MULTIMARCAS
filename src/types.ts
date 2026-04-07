@@ -82,7 +82,8 @@ export interface UserProfile {
   phone?: string;
   status: 'pending' | 'approved' | 'rejected';
   betsSubmitted?: boolean;
-  paymentStatus?: 'pending' | 'approved' | 'none';
+  paymentStatus?: 'pending' | 'approved' | 'rejected' | 'none';
+  rejectionMessage?: string | null;
 }
 
 export interface Team {
@@ -95,6 +96,7 @@ export interface Cartela {
   id: string;
   userId: string;
   userName: string;
+  userWhatsapp?: string;
   predictions: Record<string, 'win1' | 'draw' | 'win2'>;
   paymentStatus: 'pending' | 'approved' | 'rejected';
   timestamp: string;

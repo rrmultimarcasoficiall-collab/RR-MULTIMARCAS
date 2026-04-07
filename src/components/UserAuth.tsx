@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { auth, googleProvider, signInWithPopup, signOut, db, doc, getDoc, setDoc } from '../firebase';
+import { supabase } from '../supabase';
 import { UserProfile } from '../types';
 import { LogIn, LogOut, User as UserIcon, AlertCircle } from 'lucide-react';
 
@@ -12,41 +12,11 @@ export default function UserAuth({ userProfile, onProfileUpdate }: UserAuthProps
   const [error, setError] = useState<string | null>(null);
 
   const handleLogin = async () => {
-    setError(null);
-    try {
-      const result = await signInWithPopup(auth, googleProvider);
-      const user = result.user;
-      
-      // Check if user exists in Firestore
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      if (!userDoc.exists()) {
-        const newProfile: UserProfile = {
-          uid: user.uid,
-          email: user.email || '',
-          displayName: user.displayName || 'Usuário',
-          role: user.email === 'rrmultimarcasoficiall@gmail.com' ? 'admin' : 'user',
-          status: user.email === 'rrmultimarcasoficiall@gmail.com' ? 'approved' : 'pending'
-        };
-        await setDoc(doc(db, 'users', user.uid), newProfile);
-        onProfileUpdate(newProfile);
-      } else {
-        const profile = userDoc.data() as UserProfile;
-        // Force admin for specific email
-        if (user.email === 'rrmultimarcasoficiall@gmail.com') {
-          profile.role = 'admin';
-          profile.status = 'approved';
-          await setDoc(doc(db, 'users', user.uid), profile);
-        }
-        onProfileUpdate(profile);
-      }
-    } catch (error: any) {
-      console.error('Login error', error);
-      setError(error.message || 'Erro ao entrar com Google. Verifique se o pop-up foi bloqueado.');
-    }
+    // Google login removed as requested
   };
 
   const handleLogout = async () => {
-    await signOut(auth);
+    await supabase.auth.signOut();
     onProfileUpdate(null);
   };
 
@@ -70,15 +40,7 @@ export default function UserAuth({ userProfile, onProfileUpdate }: UserAuthProps
               <LogOut size={12} md:size={14} />
             </button>
           </div>
-        ) : (
-          <button 
-            onClick={handleLogin}
-            className="inline-flex items-center gap-2 bg-white/10 text-white font-bold px-6 py-2.5 rounded-full border border-white/10 hover:bg-white/20 transition-all"
-          >
-            <LogIn size={18} />
-            Entrar com Google
-          </button>
-        )}
+        ) : null}
       </div>
       {error && (
         <div className="flex items-center gap-2 text-red-400 text-[0.65rem] bg-red-400/10 px-3 py-1 rounded-full border border-red-400/20">

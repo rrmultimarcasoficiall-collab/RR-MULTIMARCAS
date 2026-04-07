@@ -1,8 +1,24 @@
 import React, { useState, useEffect } from 'react';
-import { db, collection, doc, setDoc, getDocs, onSnapshot, updateDoc, deleteDoc, writeBatch, query, orderBy } from '../firebase';
-import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
+import { supabase } from '../supabase';
 import { Game, BolaoData, Team } from '../types';
-import { Trash2, Plus, Check, Clock, Calendar, Save, Lock, Unlock, Send, AlertTriangle, X, Search, Sparkles, Image as ImageIcon, Edit2, RotateCcw } from 'lucide-react';
+import { 
+  Trash2, 
+  Plus, 
+  Check, 
+  Clock, 
+  Calendar, 
+  Save, 
+  Lock, 
+  Unlock, 
+  Send, 
+  AlertTriangle, 
+  X, 
+  Search, 
+  Sparkles, 
+  Image as ImageIcon, 
+  Edit2, 
+  RotateCcw 
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Type } from "@google/genai";
 
@@ -114,29 +130,26 @@ export default function AdminGames() {
   const applyAssistantGames = async () => {
     if (foundGames.length === 0) return;
     
-    const batch = writeBatch(db);
-    foundGames.forEach((game, idx) => {
-      const id = `${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 5)}`;
-      
-      // Try to find logos in our database
-      const team1Data = teams.find(t => t.name.toLowerCase().trim() === game.team1.toLowerCase().trim());
-      const team2Data = teams.find(t => t.name.toLowerCase().trim() === game.team2.toLowerCase().trim());
-
-      batch.set(doc(collection(db, 'draftGames'), id), {
-        team1: game.team1,
-        team2: game.team2,
-        logo1: team1Data?.logo || '',
-        logo2: team2Data?.logo || '',
-        date: game.date,
-        time: game.time,
-        id,
-        result: 'pending',
-        order: pendingGames.length + idx + 1
-      });
-    });
-
     try {
-      await batch.commit();
+      const gamesToInsert = foundGames.map((game, idx) => {
+        const team1Data = teams.find(t => t.name.toLowerCase().trim() === game.team1.toLowerCase().trim());
+        const team2Data = teams.find(t => t.name.toLowerCase().trim() === game.team2.toLowerCase().trim());
+
+        return {
+          home_team: game.team1,
+          away_team: game.team2,
+          home_logo: team1Data?.logo || '',
+          away_logo: team2Data?.logo || '',
+          date: game.date,
+          time: game.time,
+          result: 'pending',
+          order: pendingGames.length + idx + 1
+        };
+      });
+
+      const { error } = await supabase.from('draft_games').insert(gamesToInsert);
+      if (error) throw error;
+
       setAssistantPrompt('');
       setAssistantResponse(null);
       setFoundGames([]);
@@ -146,46 +159,92 @@ export default function AdminGames() {
   };
 
   useEffect(() => {
-    const unsubActive = onSnapshot(query(collection(db, 'games'), orderBy('order', 'asc')), (snapshot) => {
-      const gamesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
-      setActiveGames(gamesData);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'games');
-    });
+    const fetchInitialData = async () => {
+      try {
+        // Fetch Games
+        const { data: gamesData, error: gamesError } = await supabase
+          .from('games')
+          .select('*')
+          .order('order', { ascending: true });
+        if (gamesError) throw gamesError;
+        setActiveGames(gamesData.map(g => ({
+          id: g.id,
+          team1: g.home_team,
+          team2: g.away_team,
+          logo1: g.home_logo,
+          logo2: g.away_logo,
+          date: g.date,
+          time: g.time,
+          result: g.result,
+          order: g.order
+        } as Game)));
 
-    const unsubDraft = onSnapshot(query(collection(db, 'draftGames'), orderBy('order', 'asc')), (snapshot) => {
-      const gamesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Game));
-      setPendingGames(gamesData);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'draftGames');
-    });
+        // Fetch Draft Games
+        const { data: draftData, error: draftError } = await supabase
+          .from('draft_games')
+          .select('*')
+          .order('order', { ascending: true });
+        if (draftError) throw draftError;
+        setPendingGames(draftData.map(g => ({
+          id: g.id,
+          team1: g.home_team,
+          team2: g.away_team,
+          logo1: g.home_logo,
+          logo2: g.away_logo,
+          date: g.date,
+          time: g.time,
+          result: g.result,
+          order: g.order
+        } as Game)));
 
-    const unsubConfig = onSnapshot(doc(db, 'config', 'main'), (snapshot) => {
-      if (snapshot.exists()) {
-        const cfg = snapshot.data() as BolaoData;
+        // Fetch Config
+        const { data: configData, error: configError } = await supabase
+          .from('config')
+          .select('*')
+          .eq('id', 'main')
+          .single();
+        if (configError) throw configError;
+        const cfg = {
+          nextRoundTitle: configData.next_round_title,
+          nextRoundDate: configData.next_round_date,
+          nextRoundTime: configData.next_round_time,
+          isBettingClosed: configData.is_betting_closed,
+          isAuditReady: configData.is_audit_ready,
+          isOverrideClosed: configData.is_override_closed,
+          deadline: configData.deadline
+        } as BolaoData;
         setConfig(cfg);
         setNextRound({
           title: cfg.nextRoundTitle || '',
           date: cfg.nextRoundDate || '',
           time: cfg.nextRoundTime || ''
         });
-      }
-    }, (error) => {
-      handleFirestoreError(error, OperationType.GET, 'config/main');
-    });
 
-    const unsubTeams = onSnapshot(collection(db, 'teams'), (snapshot) => {
-      const teamsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Team));
-      setTeams(teamsData);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'teams');
-    });
+        // Fetch Teams
+        const { data: teamsData, error: teamsError } = await supabase
+          .from('teams')
+          .select('*')
+          .order('name');
+        if (teamsError) throw teamsError;
+        setTeams(teamsData as Team[]);
+
+      } catch (error) {
+        console.error('Error fetching initial data:', error);
+      }
+    };
+
+    fetchInitialData();
+
+    // Set up Realtime Subscriptions
+    const gamesChannel = supabase.channel('games-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'games' }, () => fetchInitialData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'draft_games' }, () => fetchInitialData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'config' }, () => fetchInitialData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'teams' }, () => fetchInitialData())
+      .subscribe();
 
     return () => {
-      unsubActive();
-      unsubDraft();
-      unsubConfig();
-      unsubTeams();
+      supabase.removeChannel(gamesChannel);
     };
   }, []);
 
@@ -196,30 +255,42 @@ export default function AdminGames() {
   const addGameToPreparation = async () => {
     if (!newGame.team1 || !newGame.team2) return;
     
-    if (editingGameId && editingSource) {
-      try {
-        const collectionName = editingSource === 'active' ? 'games' : 'draftGames';
-        await updateDoc(doc(db, collectionName, editingGameId), {
-          ...newGame
-        });
+    try {
+      const gameData = {
+        home_team: newGame.team1,
+        away_team: newGame.team2,
+        home_logo: newGame.logo1,
+        away_logo: newGame.logo2,
+        date: newGame.date,
+        time: newGame.time,
+        order: newGame.order || pendingGames.length + 1,
+        status: 'pending',
+        result: 'pending'
+      };
+
+      if (editingGameId && editingSource) {
+        const table = editingSource === 'active' ? 'games' : 'draft_games';
+        const { error } = await supabase
+          .from(table)
+          .update(gameData)
+          .eq('id', editingGameId);
+        
+        if (error) throw error;
         setEditingGameId(null);
         setEditingSource(null);
         setNewGame({ team1: '', team2: '', logo1: '', logo2: '', date: '', time: '', order: 0 });
         showConfirm('Sucesso', 'Jogo atualizado com sucesso!', () => {}, 'success');
-      } catch (error) {
-        console.error('Error updating game:', error);
+      } else {
+        const { error } = await supabase
+          .from('draft_games')
+          .insert(gameData);
+        
+        if (error) throw error;
+        setNewGame({ team1: '', team2: '', logo1: '', logo2: '', date: '', time: '', order: 0 });
       }
-      return;
+    } catch (error) {
+      console.error('Error saving game:', error);
     }
-
-    const id = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    await setDoc(doc(db, 'draftGames', id), {
-      ...newGame,
-      id,
-      result: 'pending',
-      order: pendingGames.length + 1
-    });
-    setNewGame({ team1: '', team2: '', logo1: '', logo2: '', date: '', time: '', order: 0 });
   };
 
   const editGame = (game: Game, source: 'draft' | 'active') => {
@@ -282,32 +353,28 @@ export default function AdminGames() {
 
     setIsSavingConfig(true);
     try {
-      const batch = writeBatch(db);
-      
-      const draftGamesSnap = await getDocs(collection(db, 'draftGames'));
-      draftGamesSnap.forEach(d => batch.delete(d.ref));
+      // Clear draft games
+      await supabase.from('draft_games').delete().neq('id', '00000000-0000-0000-0000-000000000000');
 
-      simulationGames.forEach((game, idx) => {
+      const gamesToInsert = simulationGames.map((game, idx) => {
         const team1Data = teams.find(t => t.name.toLowerCase().trim() === game.team1.toLowerCase());
         const team2Data = teams.find(t => t.name.toLowerCase().trim() === game.team2.toLowerCase());
 
-        const logo1 = team1Data?.logo || fallbackLogos[game.team1];
-        const logo2 = team2Data?.logo || fallbackLogos[game.team2];
-
-        const newGameRef = doc(collection(db, 'draftGames'));
-        batch.set(newGameRef, { 
-          team1: game.team1,
-          team2: game.team2,
-          logo1,
-          logo2,
+        return {
+          home_team: game.team1,
+          away_team: game.team2,
+          home_logo: team1Data?.logo || fallbackLogos[game.team1],
+          away_logo: team2Data?.logo || fallbackLogos[game.team2],
           date: '2024-04-10',
           time: '16:00',
-          id: newGameRef.id, 
           result: 'pending',
           order: idx + 1
-        });
+        };
       });
-      await batch.commit();
+
+      const { error } = await supabase.from('draft_games').insert(gamesToInsert);
+      if (error) throw error;
+
       showConfirm('Sucesso!', '8 jogos de simulação adicionados à preparação!', () => {}, 'success');
     } catch (error) {
       console.error('Error simulating games:', error);
@@ -321,7 +388,7 @@ export default function AdminGames() {
       'Atualizar Resultado?',
       `Confirmar resultado: ${result === 'win1' ? 'Time 1' : result === 'win2' ? 'Time 2' : result === 'draw' ? 'Empate' : 'Pendente'}?`,
       async () => {
-        await updateDoc(doc(db, 'games', gameId), { result });
+        await supabase.from('games').update({ result }).eq('id', gameId);
       }
     );
   };
@@ -331,7 +398,7 @@ export default function AdminGames() {
       'Excluir Jogo Ativo?',
       'Tem certeza que deseja remover este jogo da rodada atual?',
       async () => {
-        await deleteDoc(doc(db, 'games', gameId));
+        await supabase.from('games').delete().eq('id', gameId);
       },
       'danger'
     );
@@ -342,7 +409,7 @@ export default function AdminGames() {
       'Excluir Jogo?',
       'Tem certeza que deseja remover este jogo da lista de preparação?',
       async () => {
-        await deleteDoc(doc(db, 'draftGames', gameId));
+        await supabase.from('draft_games').delete().eq('id', gameId);
       },
       'danger'
     );
@@ -355,9 +422,7 @@ export default function AdminGames() {
       newState ? 'Encerrar Apostas?' : 'Abrir Apostas?',
       newState ? 'Os usuários não poderão mais enviar palpites.' : 'Os usuários poderão enviar palpites novamente.',
       async () => {
-        await updateDoc(doc(db, 'config', 'main'), { 
-          isBettingClosed: newState 
-        });
+        await supabase.from('config').update({ is_betting_closed: newState }).eq('id', 'main');
       }
     );
   };
@@ -370,12 +435,12 @@ export default function AdminGames() {
         setIsSavingConfig(true);
         try {
           const deadline = nextRound.date && nextRound.time ? `${nextRound.date}T${nextRound.time}` : '';
-          await updateDoc(doc(db, 'config', 'main'), {
-            nextRoundTitle: nextRound.title,
-            nextRoundDate: nextRound.date,
-            nextRoundTime: nextRound.time,
+          await supabase.from('config').update({
+            next_round_title: nextRound.title,
+            next_round_date: nextRound.date,
+            next_round_time: nextRound.time,
             deadline: deadline
-          });
+          }).eq('id', 'main');
         } catch (e) {
           console.error(e);
         } finally {
@@ -397,41 +462,44 @@ export default function AdminGames() {
       async () => {
         setIsSavingConfig(true);
         try {
-          const batch = writeBatch(db);
+          // 1. Delete all active games
+          await supabase.from('games').delete().neq('id', '00000000-0000-0000-0000-000000000000');
 
-          const activeGamesSnap = await getDocs(collection(db, 'games'));
-          activeGamesSnap.forEach(d => batch.delete(d.ref));
+          // 2. Delete all bets
+          await supabase.from('bets').delete().neq('id', '00000000-0000-0000-0000-000000000000');
 
-          const betsSnap = await getDocs(collection(db, 'bets'));
-          betsSnap.forEach(d => batch.delete(d.ref));
+          // 3. Delete all cartelas
+          await supabase.from('cartelas').delete().neq('id', '00000000-0000-0000-0000-000000000000');
 
-          const cartelasSnap = await getDocs(collection(db, 'cartelas'));
-          cartelasSnap.forEach(d => batch.delete(d.ref));
+          // 4. Reset all users
+          await supabase.from('profiles').update({
+            bets_submitted: false,
+            payment_status: 'none'
+          }).neq('role', 'admin');
 
-          const usersSnap = await getDocs(collection(db, 'users'));
-          usersSnap.forEach(d => {
-            batch.update(d.ref, { 
-              betsSubmitted: false, 
-              paymentStatus: 'none' 
-            });
-          });
+          // 5. Publish draft games
+          const gamesToInsert = pendingGames.map(g => ({
+            home_team: g.team1,
+            away_team: g.team2,
+            home_logo: g.logo1,
+            away_logo: g.logo2,
+            date: g.date,
+            time: g.time,
+            result: 'pending',
+            order: g.order
+          }));
+          await supabase.from('games').insert(gamesToInsert);
 
-          pendingGames.forEach(game => {
-            const newGameRef = doc(collection(db, 'games'));
-            const { id, ...gameData } = game;
-            batch.set(newGameRef, { ...gameData, id: newGameRef.id });
-          });
+          // 6. Clear draft games
+          await supabase.from('draft_games').delete().neq('id', '00000000-0000-0000-0000-000000000000');
 
-          const draftGamesSnap = await getDocs(collection(db, 'draftGames'));
-          draftGamesSnap.forEach(d => batch.delete(d.ref));
+          // 7. Reset config
+          await supabase.from('config').update({
+            is_betting_closed: false,
+            is_audit_ready: false,
+            is_override_closed: false
+          }).eq('id', 'main');
 
-          batch.update(doc(db, 'config', 'main'), {
-            isBettingClosed: false,
-            isAuditReady: false,
-            isOverrideClosed: false
-          });
-
-          await batch.commit();
           showConfirm('Sucesso!', 'Rodada postada com sucesso! Apostas liberadas.', () => {}, 'success');
         } catch (error) {
           console.error('Error posting round:', error);

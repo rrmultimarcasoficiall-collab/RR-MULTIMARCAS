@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { db, collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc } from '../firebase';
-import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
+import { supabase } from '../supabase';
 import { Team } from '../types';
-import { Trash2, Plus, Search, Smartphone, ShieldCheck, Edit2 } from 'lucide-react';
+import { Trash2, Plus, Search, Smartphone, ShieldCheck, Edit2, RefreshCw, X as LucideX } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function AdminTeams() {
@@ -11,43 +10,87 @@ export default function AdminTeams() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isAdding, setIsAdding] = useState(false);
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
+  const [teamToDelete, setTeamToDelete] = useState<string | null>(null);
   const [newTeamName, setNewTeamName] = useState('');
   const [newTeamLogo, setNewTeamLogo] = useState('');
   const [isBatchUploading, setIsBatchUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
+  const [pendingBatch, setPendingBatch] = useState<{ name: string, logo: string }[]>([]);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const fetchTeams = async () => {
+    setIsRefreshing(true);
+    try {
+      const { data, error } = await supabase
+        .from('teams')
+        .select('*')
+        .order('name');
+      
+      if (error) {
+        console.error('Error fetching teams:', error);
+        setTeams([]);
+      } else {
+        setTeams((data || []) as Team[]);
+      }
+    } catch (error) {
+      console.error('Error fetching teams:', error);
+    } finally {
+      setLoading(false);
+      setIsRefreshing(false);
+    }
+  };
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'teams'), (snapshot) => {
-      const teamsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Team));
-      setTeams(teamsData.sort((a, b) => a.name.localeCompare(b.name)));
+    fetchTeams();
+    
+    // Safety timeout to prevent stuck loading
+    const timeoutId = setTimeout(() => {
       setLoading(false);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, 'teams');
-      setLoading(false);
-    });
-    return () => unsub();
+    }, 5000);
+
+    return () => clearTimeout(timeoutId);
   }, []);
 
   const handleAddTeam = async () => {
     if (!newTeamName || !newTeamLogo) return;
     try {
       if (editingTeam) {
-        await updateDoc(doc(db, 'teams', editingTeam.id), {
-          name: newTeamName.trim(),
-          logo: newTeamLogo
-        });
+        const { error } = await supabase
+          .from('teams')
+          .update({
+            name: newTeamName.trim(),
+            logo: newTeamLogo
+          })
+          .eq('id', editingTeam.id);
+        
+        if (error) throw error;
+        setTeams(prev => prev.map(t => t.id === editingTeam.id ? { ...t, name: newTeamName.trim(), logo: newTeamLogo } : t));
       } else {
-        await addDoc(collection(db, 'teams'), {
-          name: newTeamName.trim(),
-          logo: newTeamLogo
-        });
+        const { data, error } = await supabase
+          .from('teams')
+          .insert({
+            name: newTeamName.trim(),
+            logo: newTeamLogo
+          })
+          .select()
+          .single();
+        
+        if (error) throw error;
+        setTeams(prev => [...prev, data as Team].sort((a, b) => a.name.localeCompare(b.name)));
       }
       setNewTeamName('');
       setNewTeamLogo('');
       setIsAdding(false);
       setEditingTeam(null);
-    } catch (error) {
+      setSuccessMsg(editingTeam ? 'Escudo atualizado!' : 'Escudo salvo!');
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (error: any) {
       console.error('Error saving team:', error);
+      setErrorMsg(`Erro ao salvar: ${error.message || 'Verifique as regras do Supabase'}`);
+      setTimeout(() => setErrorMsg(null), 5000);
     }
   };
 
@@ -58,10 +101,17 @@ export default function AdminTeams() {
     setIsAdding(true);
   };
 
-  const handleDeleteTeam = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir este escudo?')) return;
+  const handleDeleteTeam = async () => {
+    if (!teamToDelete) return;
     try {
-      await deleteDoc(doc(db, 'teams', id));
+      const { error } = await supabase
+        .from('teams')
+        .delete()
+        .eq('id', teamToDelete);
+      
+      if (error) throw error;
+      setTeams(prev => prev.filter(t => t.id !== teamToDelete));
+      setTeamToDelete(null);
     } catch (error) {
       console.error('Error deleting team:', error);
     }
@@ -71,55 +121,121 @@ export default function AdminTeams() {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    setIsBatchUploading(true);
     const fileList = Array.from(files) as File[];
-    setUploadProgress({ current: 0, total: fileList.length });
     
-    let count = 0;
-    for (const file of fileList) {
-      count++;
-      setUploadProgress(prev => ({ ...prev, current: count }));
-
+    // If only one file, just populate the fields and let the user click Save
+    if (fileList.length === 1) {
+      const file = fileList[0];
       if (file.size > 800000) {
-        console.warn(`Arquivo ${file.name} ignorado: muito grande (>800KB)`);
+        setErrorMsg('A imagem é muito grande! Tente uma imagem menor que 800KB.');
+        setTimeout(() => setErrorMsg(null), 3000);
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewTeamLogo(reader.result as string);
+        setNewTeamName(file.name.replace(/\.[^/.]+$/, "").replace(/[-_]/g, " ").trim());
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    // If multiple files, prepare for batch upload
+    const batch: { name: string, logo: string }[] = [];
+    setIsBatchUploading(true);
+    setUploadProgress({ current: 0, total: fileList.length });
+
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i];
+      
+      // Pequena pausa para a interface atualizar
+      await new Promise(resolve => setTimeout(resolve, 100));
+      setUploadProgress({ current: i + 1, total: fileList.length });
+
+      if (file.size > 1000000) { // Aumentado para 1MB
+        console.warn(`Arquivo ${file.name} ignorado: muito grande (>1MB)`);
         continue;
       }
 
       try {
-        const base64 = await new Promise<string>((resolve) => {
+        const base64 = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = () => reject(new Error('Erro ao ler arquivo'));
           reader.readAsDataURL(file);
         });
 
-        // Use filename as team name (remove extension and replace separators)
         const teamName = file.name
-          .replace(/\.[^/.]+$/, "") // remove extension
-          .replace(/[-_]/g, " ")    // replace dashes/underscores with spaces
+          .replace(/\.[^/.]+$/, "")
+          .replace(/[-_]/g, " ")
           .trim();
         
-        await addDoc(collection(db, 'teams'), {
-          name: teamName,
-          logo: base64
-        });
+        batch.push({ name: teamName, logo: base64 });
       } catch (error) {
-        console.error(`Erro ao subir ${file.name}:`, error);
+        console.error(`Erro ao processar ${file.name}:`, error);
       }
     }
-    
+
     setIsBatchUploading(false);
-    setIsAdding(false);
-    setNewTeamName('');
-    setNewTeamLogo('');
-    // Reset the input value so the same files can be selected again if needed
+    if (batch.length > 0) {
+      setPendingBatch(batch);
+    } else {
+      setErrorMsg('Nenhum arquivo válido selecionado para subir.');
+      setTimeout(() => setErrorMsg(null), 3000);
+    }
+    
     e.target.value = '';
+  };
+
+  const handleConfirmBatchUpload = async () => {
+    if (pendingBatch.length === 0) return;
+    
+    setIsBatchUploading(true);
+    setUploadProgress({ current: 0, total: pendingBatch.length });
+    
+    try {
+      const chunkSize = 2; // Reduzido para 2 para evitar erro de tamanho de pacote
+      const newTeamsList: Team[] = [];
+      
+      for (let i = 0; i < pendingBatch.length; i += chunkSize) {
+        const chunk = pendingBatch.slice(i, i + chunkSize);
+        
+        const { data, error } = await supabase
+          .from('teams')
+          .insert(chunk)
+          .select();
+        
+        if (error) {
+          // Se der erro em um lote, mostramos o erro específico
+          throw new Error(error.message);
+        }
+        
+        if (data) newTeamsList.push(...(data as Team[]));
+        
+        setUploadProgress(prev => ({ ...prev, current: Math.min(i + chunkSize, pendingBatch.length) }));
+      }
+      
+      setTeams(prev => [...prev, ...newTeamsList].sort((a, b) => a.name.localeCompare(b.name)));
+      setSuccessMsg(`${newTeamsList.length} escudos subidos com sucesso!`);
+      setTimeout(() => setSuccessMsg(null), 3000);
+      
+      setPendingBatch([]);
+      setIsAdding(false);
+    } catch (error: any) {
+      console.error('Erro no upload em lote:', error);
+      setErrorMsg(`Erro: ${error.message || 'Falha ao salvar. Tente subir menos arquivos.'}`);
+      setTimeout(() => setErrorMsg(null), 6000);
+    } finally {
+      setIsBatchUploading(false);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, callback: (v: string) => void) => {
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 800000) {
-        alert('A imagem é muito grande! Tente uma imagem menor que 800KB.');
+        setErrorMsg('A imagem é muito grande! Tente uma imagem menor que 800KB.');
+        setTimeout(() => setErrorMsg(null), 3000);
         return;
       }
       const reader = new FileReader();
@@ -140,9 +256,19 @@ export default function AdminTeams() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between border-b border-white/5 pb-4">
-        <div>
-          <h3 className="font-bebas text-2xl text-white">Banco de Escudos</h3>
-          <p className="text-xs text-white-primary/40 uppercase tracking-widest">Gerencie os logotipos dos times</p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h3 className="font-bebas text-2xl text-white">Banco de Escudos</h3>
+            <p className="text-xs text-white-primary/40 uppercase tracking-widest">Gerencie os logotipos dos times</p>
+          </div>
+          <button 
+            onClick={fetchTeams}
+            disabled={isRefreshing}
+            className="p-2 bg-white/5 text-white-primary/40 rounded-xl hover:bg-white/10 hover:text-white transition-all disabled:opacity-50"
+            title="Atualizar Lista"
+          >
+            <RefreshCw size={18} className={isRefreshing ? 'animate-spin' : ''} />
+          </button>
         </div>
         <button 
           onClick={() => setIsAdding(true)}
@@ -175,16 +301,18 @@ export default function AdminTeams() {
               exit={{ opacity: 0, scale: 0.9 }}
               className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col items-center gap-3 group relative"
             >
-              <div className="absolute top-2 right-2 flex gap-1 opacity-100 md:opacity-0 lg:opacity-0 group-hover:opacity-100 transition-all">
+              <div className="absolute top-2 right-2 flex gap-1 opacity-100 transition-all z-10">
                 <button 
                   onClick={() => handleEditTeam(team)}
-                  className="p-1.5 text-white-primary/60 md:text-white-primary/20 hover:text-green-primary hover:bg-green-primary/10 rounded-lg transition-all bg-black/40 md:bg-transparent"
+                  className="p-2 text-white bg-black/60 hover:bg-green-primary rounded-lg transition-all border border-white/10"
+                  title="Editar Nome"
                 >
                   <Edit2 size={14} />
                 </button>
                 <button 
-                  onClick={() => handleDeleteTeam(team.id)}
-                  className="p-1.5 text-white-primary/60 md:text-white-primary/20 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all bg-black/40 md:bg-transparent"
+                  onClick={() => setTeamToDelete(team.id)}
+                  className="p-2 text-white bg-black/60 hover:bg-red-500 rounded-lg transition-all border border-white/10"
+                  title="Excluir Escudo"
                 >
                   <Trash2 size={14} />
                 </button>
@@ -197,6 +325,42 @@ export default function AdminTeams() {
           ))}
         </AnimatePresence>
       </div>
+
+      {teamToDelete && (
+        <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-[#111418] border border-white/10 rounded-3xl p-8 w-full max-w-md space-y-6"
+          >
+            <div className="flex items-center gap-4 text-red-500">
+              <div className="w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
+                <Trash2 size={24} />
+              </div>
+              <h4 className="font-bebas text-2xl">Excluir Escudo?</h4>
+            </div>
+            
+            <p className="text-white-primary/60 text-sm leading-relaxed">
+              Tem certeza que deseja excluir este escudo permanentemente? Esta ação não pode ser desfeita.
+            </p>
+
+            <div className="flex gap-3 pt-4">
+              <button 
+                onClick={() => setTeamToDelete(null)}
+                className="flex-1 px-6 py-3 bg-white/5 text-white font-bold rounded-xl hover:bg-white/10 transition-all"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={handleDeleteTeam}
+                className="flex-1 px-6 py-3 bg-red-500 text-white font-bold rounded-xl hover:bg-red-600 transition-all"
+              >
+                Confirmar Exclusão
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
 
       {isAdding && (
         <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm">
@@ -213,14 +377,63 @@ export default function AdminTeams() {
             </div>
 
             <div className="space-y-4">
+              {errorMsg && (
+                <div className="bg-red-500/10 border border-red-500/20 text-red-500 px-4 py-3 rounded-xl text-xs font-bold text-center animate-shake">
+                  {errorMsg}
+                </div>
+              )}
+              {successMsg && (
+                <div className="bg-green-500/10 border border-green-500/20 text-green-500 px-4 py-3 rounded-xl text-xs font-bold text-center">
+                  {successMsg}
+                </div>
+              )}
               {isBatchUploading ? (
-                <div className="py-12 flex flex-col items-center justify-center space-y-4">
-                  <div className="w-16 h-16 border-4 border-green-primary/20 border-t-green-primary rounded-full animate-spin" />
-                  <div className="text-center">
-                    <p className="font-bebas text-xl">Subindo Escudos...</p>
+                <div className="py-12 flex flex-col items-center justify-center space-y-6">
+                  <div className="relative">
+                    <div className="w-20 h-20 border-4 border-green-primary/10 border-t-green-primary rounded-full animate-spin" />
+                    <div className="absolute inset-0 flex items-center justify-center text-[0.6rem] font-bold text-green-primary">
+                      {Math.round((uploadProgress.current / uploadProgress.total) * 100)}%
+                    </div>
+                  </div>
+                  <div className="text-center space-y-2">
+                    <p className="font-bebas text-2xl tracking-wide">Processando Arquivos...</p>
                     <p className="text-xs text-white-primary/40 uppercase tracking-widest">
                       {uploadProgress.current} de {uploadProgress.total} concluídos
                     </p>
+                  </div>
+                  <button 
+                    onClick={() => setIsBatchUploading(false)}
+                    className="text-[0.65rem] text-red-500 hover:text-red-400 font-bold uppercase tracking-widest underline underline-offset-4"
+                  >
+                    Cancelar Processamento
+                  </button>
+                </div>
+              ) : pendingBatch.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4 max-h-60 overflow-y-auto space-y-2">
+                    <p className="text-[0.65rem] font-bold uppercase tracking-widest text-white-primary/40 mb-2">
+                      {pendingBatch.length} Escudos Prontos para Subir
+                    </p>
+                    {pendingBatch.map((item, idx) => (
+                      <div key={idx} className="flex items-center gap-3 bg-white/5 p-2 rounded-lg border border-white/5">
+                        <img src={item.logo} alt="" className="w-8 h-8 object-contain" referrerPolicy="no-referrer" />
+                        <span className="text-xs truncate">{item.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-3">
+                    <button 
+                      onClick={() => setPendingBatch([])}
+                      className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-white font-bold rounded-xl transition-all text-xs uppercase tracking-widest"
+                    >
+                      Cancelar
+                    </button>
+                    <button 
+                      onClick={handleConfirmBatchUpload}
+                      className="flex-1 py-3 bg-green-primary hover:bg-green-600 text-white font-bold rounded-xl transition-all text-xs uppercase tracking-widest shadow-lg shadow-green-primary/20"
+                    >
+                      Confirmar Upload
+                    </button>
                   </div>
                 </div>
               ) : (
@@ -272,7 +485,7 @@ export default function AdminTeams() {
               )}
             </div>
 
-            {!isBatchUploading && (
+            {!isBatchUploading && pendingBatch.length === 0 && (
               <button 
                 onClick={handleAddTeam}
                 disabled={!newTeamName || !newTeamLogo}
