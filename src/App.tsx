@@ -20,8 +20,7 @@ import {
   Trash2,
   Clock,
   ArrowRight,
-  LogOut,
-  LogIn
+  LogOut
 } from 'lucide-react';
 import { BolaoData, UserProfile } from './types';
 import { DEFAULT_BOLAO_DATA, STORAGE_KEY } from './constants';
@@ -31,7 +30,6 @@ import AdminUsers from './components/AdminUsers';
 import AdminPayments from './components/AdminPayments';
 import AdminTeams from './components/AdminTeams';
 import ClientGames from './components/ClientGames';
-import UserAuth from './components/UserAuth';
 import AuditView from './components/AuditView';
 
 interface ErrorBoundaryProps {
@@ -532,8 +530,6 @@ export default function App() {
               exit={{ opacity: 0 }}
             >
               <div className="fixed top-8 right-8 z-50 flex items-center gap-4">
-                <UserAuth userProfile={userProfile} onProfileUpdate={setUserProfile} />
-                
                 {isAdminLoggedIn ? (
                   <div className="flex items-center gap-2">
                     <button 
@@ -596,7 +592,7 @@ export default function App() {
                               value={adminLoginData.email}
                               onChange={(e) => setAdminLoginData({ ...adminLoginData, email: e.target.value })}
                               className="w-full bg-white/5 border border-white/10 rounded-2xl px-4 py-4 outline-none focus:border-green-primary transition-all text-sm text-white"
-                              placeholder="seu-email@exemplo.com"
+                              placeholder="Digite seu e-mail"
                               required
                             />
                           </div>
