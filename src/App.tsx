@@ -668,7 +668,7 @@ export default function App() {
                       </div>
                       <input 
                         type="text" 
-                        value={completeName}
+                        value={completeName || ''}
                         onChange={(e) => setCompleteName(e.target.value)}
                         placeholder="Seu nome completo"
                         className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-4 py-4 outline-none focus:border-green-primary focus:bg-white/10 transition-all text-sm"
@@ -684,7 +684,7 @@ export default function App() {
                       </div>
                       <input 
                         type="tel" 
-                        value={completePhone}
+                        value={completePhone || ''}
                         onChange={(e) => setCompletePhone(e.target.value)}
                         placeholder="(00) 00000-0000"
                         className="w-full bg-white/5 border border-white/10 rounded-2xl pl-12 pr-4 py-4 outline-none focus:border-green-primary focus:bg-white/10 transition-all text-sm"
@@ -973,7 +973,7 @@ export default function App() {
                                           <AdminField 
                                             label="Data/Hora Limite das Apostas" 
                                             type="datetime-local"
-                                            value={data.deadline} 
+                                            value={data.deadline || ''} 
                                             onChange={(v) => updateField('deadline', v)} 
                                           />
                                         </div>
@@ -1077,7 +1077,7 @@ function AdminField({ label, value, onChange, isTextArea, type = 'text', isImage
       </div>
       {isTextArea ? (
         <textarea 
-          value={value}
+          value={value || ''}
           onChange={(e) => onChange(e.target.value)}
           className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 outline-none focus:border-green-primary transition-colors min-h-[100px] text-sm"
         />
@@ -1085,7 +1085,7 @@ function AdminField({ label, value, onChange, isTextArea, type = 'text', isImage
         <div className="space-y-2">
           <input 
             type={type}
-            value={value}
+            value={value || ''}
             onChange={(e) => onChange(e.target.value)}
             className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 outline-none focus:border-green-primary transition-colors text-sm"
             placeholder="URL da imagem..."
@@ -1105,7 +1105,7 @@ function AdminField({ label, value, onChange, isTextArea, type = 'text', isImage
       ) : (
         <input 
           type={type}
-          value={value}
+          value={value || ''}
           onChange={(e) => onChange(e.target.value)}
           className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 outline-none focus:border-green-primary transition-colors text-sm"
         />
